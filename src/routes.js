@@ -64,6 +64,7 @@ function dayInfo(now = new Date()) {
     number: game.dayNumber(key),
     quarter: game.quarterKey(key),
     resets_at: game.nextReset(now).toISOString(),
+    quarter_ends_at: game.quarterEnd(now).toISOString(),
     tz: cfg.gameTz,
   };
 }
@@ -234,16 +235,21 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     [user.id, day.key],
   );
 
-  // The back of the coin: where this player's tax has gone, by charity.
+  // The back of the coin: this quarter's lobbyists by charity (the ones headed
+  // to Lobbyfest), plus the all-time picture for prefills and context.
   const { rows: byCharity } = await query(
-    `SELECT c.id, c.name, c.slug, SUM(d.amount)::float8 AS amount, COUNT(*)::int AS times
+    `SELECT c.id, c.name, c.slug,
+            COALESCE(SUM(d.amount) FILTER (WHERE d.quarter = $2), 0)::float8 AS amount,
+            COUNT(*) FILTER (WHERE d.quarter = $2)::int AS times,
+            SUM(d.amount)::float8 AS all_time
        FROM donations d JOIN charities c ON c.id = d.charity_id
-      WHERE d.user_id = $1 GROUP BY c.id ORDER BY amount DESC`,
-    [user.id],
+      WHERE d.user_id = $1 GROUP BY c.id ORDER BY amount DESC, all_time DESC`,
+    [user.id, day.quarter],
   );
+  const quarterDonated = byCharity.reduce((s, c) => s + c.amount, 0);
 
   res.json({
-    user: publicUser(user),
+    user: { ...publicUser(user), quarter_donated: game.round2(quarterDonated) },
     day,
     allowance,
     rules: { tax_rate: cfg.taxRate, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
@@ -443,6 +449,7 @@ router.get('/trickle', wrap(async (req, res) => {
   );
   res.json({
     quarter: day.quarter,
+    quarter_ends_at: day.quarter_ends_at,
     demo: cfg.demoMode,
     pool_usd: cfg.poolUsd,
     quarter_total: quarterTotal,
@@ -457,19 +464,26 @@ router.get('/trickle', wrap(async (req, res) => {
 }));
 
 router.get('/leaderboard', wrap(async (req, res) => {
+  const day = dayInfo();
+  // Lobbyfest standings: this quarter's hires, with the career total alongside.
   const { rows: allTime } = await query(
-    `SELECT username, total_donated::float8 AS donated, realized_pnl::float8 AS realized_pnl, streak
-       FROM users WHERE total_donated > 0 ORDER BY total_donated DESC, username LIMIT 25`,
+    `SELECT u.username, u.total_donated::float8 AS donated, COALESCE(q.total, 0)::float8 AS quarter,
+            u.realized_pnl::float8 AS realized_pnl, u.streak
+       FROM users u
+       LEFT JOIN (SELECT user_id, SUM(amount) AS total FROM donations WHERE quarter = $1 GROUP BY user_id) q ON q.user_id = u.id
+      WHERE u.total_donated > 0
+      ORDER BY quarter DESC, u.total_donated DESC, u.username LIMIT 25`,
+    [day.quarter],
   );
   // Best single lock-in in the last 24 hours, by % gain on what was invested.
-  const { rows: day } = await query(
+  const { rows: day24 } = await query(
     `SELECT u.username, p.symbol, p.invested::float8 AS invested, p.proceeds::float8 AS proceeds,
             ((p.proceeds - p.invested) / p.invested)::float8 AS gain_pct, p.tier, p.closed_at
        FROM positions p JOIN users u ON u.id = p.user_id
       WHERE p.status = 'closed' AND p.closed_at > now() - interval '24 hours' AND p.invested > 0
       ORDER BY gain_pct DESC LIMIT 25`,
   );
-  res.json({ all_time: allTime, last_24h: day });
+  res.json({ quarter: day.quarter, quarter_ends_at: day.quarter_ends_at, all_time: allTime, last_24h: day24 });
 }));
 
 module.exports = router;

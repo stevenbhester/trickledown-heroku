@@ -42,6 +42,15 @@ function quarterKey(key = dayKey()) {
   return `${y}-Q${Math.floor((m - 1) / 3) + 1}`;
 }
 
+// Lobbyfest: local midnight at the start of the next quarter, as a UTC instant.
+function quarterEnd(now = new Date(), tz = cfg.gameTz) {
+  const [y, m] = dayKey(now, tz).split('-').map(Number);
+  const nextQuarterMonth = Math.floor((m - 1) / 3) * 3 + 3; // 0-based month index of next quarter's first month
+  const yy = y + Math.floor(nextQuarterMonth / 12), mm = nextQuarterMonth % 12;
+  const guess = new Date(Date.UTC(yy, mm, 1, 0, 0, 0));
+  return new Date(guess.getTime() - tzOffsetMinutes(guess, tz) * 60000);
+}
+
 // Today's allowance given the streak length *including* today.
 function allowanceFor(streak) {
   const bonus = cfg.streakBonus * Math.max(0, streak - 1);
@@ -119,6 +128,6 @@ function badgesFor(totalDonated) {
 }
 
 module.exports = {
-  round2, dayKey, addDays, nextReset, dayNumber, quarterKey,
+  round2, dayKey, addDays, nextReset, dayNumber, quarterKey, quarterEnd,
   allowanceFor, effectiveMultiplier, valueOf, tierFor, settle, badgesFor, BADGES,
 };

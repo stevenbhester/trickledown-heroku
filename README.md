@@ -37,6 +37,14 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
 - `/trickle` reports each charity's share of all lobbyists this quarter.
   `POOL_USD` is the real ad revenue you've collected; the page shows what each
   charity's share of it would be by headcount. Update it by hand until ads exist.
+- **Lobbyfest** is the quarter boundary: local midnight in `GAME_TZ` on the
+  first day of the next quarter (`quarter_ends_at` on `/me`, `/trickle` and
+  `/leaderboard`). Nothing needs to run at that moment: donations are tagged
+  with their quarter when they happen, so "this quarter's lobbyists"
+  (`user.quarter_donated`, `donations_by_charity`, the standings) roll to
+  zero on their own, while `total_donated` and the career ranks keep counting.
+  What you do at Lobbyfest is read `/trickle` for the closing quarter and send
+  the real money.
 - `DEMO_MODE=true` (the default) makes the site say plainly that the charities
   are fictional and nothing real is moving. The seed list in `src/charities.js`
   is deliberately made up for that reason.
