@@ -3,6 +3,7 @@ const cors = require('cors');
 const cfg = require('./config');
 const { migrate } = require('./migrate');
 const routes = require('./routes');
+const maturer = require('./maturer');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -27,8 +28,9 @@ app.use((err, req, res, next) => {
 
 migrate()
   .then(() => {
+    maturer.start(cfg.maturePollMs);
     app.listen(cfg.port, () => {
-      console.log(`Trickle Down API on :${cfg.port} (prices: ${cfg.priceProvider}, tz: ${cfg.gameTz})`);
+      console.log(`Trickle Down API on :${cfg.port} (prices: ${cfg.priceProvider}, tz: ${cfg.gameTz}, hold: ${cfg.holdHours}h)`);
     });
   })
   .catch((e) => {

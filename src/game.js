@@ -48,15 +48,29 @@ function allowanceFor(streak) {
   return Math.min(cfg.dailyCap, cfg.dailyBase + bonus);
 }
 
-// What an open position is worth right now. The real move is amplified by the
-// multiplier and floored at zero: a position can die, it can't go negative.
-function valueOf({ invested, entry_price, multiplier }, price) {
-  const realPct = (price - entry_price) / entry_price;
-  const swingPct = multiplier * realPct;
-  const raw = invested * (1 + swingPct);
+// The multiplier ramps with age: MULT_FLOOR (×1) the moment you buy, rising
+// linearly to the position's full multiplier at maturity, where it stays.
+// Selling early means selling at a smaller multiplier.
+function effectiveMultiplier(p, at = Date.now()) {
+  const opened = new Date(p.opened_at).getTime();
+  const matures = p.matures_at ? new Date(p.matures_at).getTime() : opened + cfg.holdHours * 3600e3;
+  const k = Math.max(0, Math.min(1, (at - opened) / Math.max(1, matures - opened)));
+  const floor = Math.min(cfg.multFloor, p.multiplier);
+  return floor + (p.multiplier - floor) * k;
+}
+
+// What a position is worth at a given instant. The real move is amplified by
+// the multiplier in force at that moment and floored at zero: a position can
+// die, it can't go negative.
+function valueOf(p, price, at = Date.now()) {
+  const mult = effectiveMultiplier(p, at);
+  const realPct = (price - p.entry_price) / p.entry_price;
+  const swingPct = mult * realPct;
+  const raw = p.invested * (1 + swingPct);
   return {
     real_pct: realPct,
     swing_pct: Math.max(-1, swingPct),
+    multiplier_now: Math.round(mult * 100) / 100,
     value: round2(Math.max(0, raw)),
     busted: raw <= 0,
   };
@@ -86,15 +100,16 @@ function settle({ invested, value }) {
   };
 }
 
-// Collectible milestones for total donated, computed on the fly.
+// Ranks for lobbyists hired (one per play-money dollar of tax), computed on
+// the fly from total_donated.
 const BADGES = [
-  { at: 1, name: 'Dribble' },
-  { at: 10, name: 'Drip' },
-  { at: 50, name: 'Trickle' },
-  { at: 250, name: 'Stream' },
-  { at: 1000, name: 'River' },
-  { at: 5000, name: 'Flood' },
-  { at: 25000, name: 'Deluge' },
+  { at: 1, name: 'Intern' },
+  { at: 10, name: 'Staffer' },
+  { at: 50, name: 'Consultant' },
+  { at: 250, name: 'Lobbyist' },
+  { at: 1000, name: 'Fixer' },
+  { at: 5000, name: 'Kingmaker' },
+  { at: 25000, name: 'Shadow Cabinet' },
 ];
 
 function badgesFor(totalDonated) {
@@ -105,5 +120,5 @@ function badgesFor(totalDonated) {
 
 module.exports = {
   round2, dayKey, addDays, nextReset, dayNumber, quarterKey,
-  allowanceFor, valueOf, tierFor, settle, badgesFor, BADGES,
+  allowanceFor, effectiveMultiplier, valueOf, tierFor, settle, badgesFor, BADGES,
 };

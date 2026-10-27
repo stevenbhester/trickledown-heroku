@@ -54,6 +54,15 @@ CREATE INDEX IF NOT EXISTS positions_user_status ON positions(user_id, status);
 CREATE INDEX IF NOT EXISTS positions_opened_day ON positions(opened_day);
 CREATE INDEX IF NOT EXISTS positions_closed_at ON positions(closed_at);
 
+-- Maturity (added after the first schema; ADD COLUMN IF NOT EXISTS keeps
+-- this safe on existing databases).
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS matures_at TIMESTAMPTZ;
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS matured_at TIMESTAMPTZ;
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS matured_price NUMERIC(20,8);
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS matured_value NUMERIC(14,2);
+UPDATE positions SET matures_at = opened_at + interval '24 hours' WHERE matures_at IS NULL;
+CREATE INDEX IF NOT EXISTS positions_matures ON positions(status, matures_at) WHERE matured_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS donations (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id),
@@ -72,13 +81,19 @@ async function migrate() {
   for (let i = 0; i < charities.length; i++) {
     const c = charities[i];
     await pool.query(
-      `INSERT INTO charities (slug, name, blurb, url, category, sort)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO charities (slug, name, blurb, url, category, sort, active)
+       VALUES ($1, $2, $3, $4, $5, $6, true)
        ON CONFLICT (slug) DO UPDATE SET
          name = EXCLUDED.name, blurb = EXCLUDED.blurb, url = EXCLUDED.url,
-         category = EXCLUDED.category, sort = EXCLUDED.sort`,
+         category = EXCLUDED.category, sort = EXCLUDED.sort, active = true`,
       [c.slug, c.name, c.blurb, c.url, c.category, i],
     );
+  }
+  // Anything no longer in the list is retired, not deleted: its donation
+  // history stays, it just stops being an option.
+  if (charities.length) {
+    const slots = charities.map((_, i) => `$${i + 1}`).join(', ');
+    await pool.query(`UPDATE charities SET active = false WHERE slug NOT IN (${slots})`, charities.map((c) => c.slug));
   }
 }
 

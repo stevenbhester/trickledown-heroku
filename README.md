@@ -9,16 +9,31 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
   plus `STREAK_BONUS` ($10) for each consecutive day beyond the first, capped at
   `DAILY_CAP` ($200). Granted at most once per game day; the game day rolls over
   at local midnight in `GAME_TZ`.
-- A buy locks in the live price. From then on the position is worth
-  `invested × (1 + multiplier × real_move)`, floored at zero. Stocks ×10,
-  crypto ×5 (`MULT_STOCK`, `MULT_CRYPTO`). The multiplier is stored on the
-  position, so changing the config later doesn't rewrite history.
-- A sell ("lock in") re-quotes, pays out, and if there is a profit charges
-  `TAX_RATE` (25%) of the profit as a donation to a charity the player picks.
-  Losses aren't taxed. A position at zero can be "buried" (same endpoint).
-- `/trickle` reports each charity's share of all play-money donations this
-  quarter. `POOL_USD` is the real ad revenue you've collected; the page shows
-  what each charity's share of it would be. Update it by hand until ads exist.
+- A buy locks in the live price and lives `HOLD_HOURS` (24). Its value is
+  `invested × (1 + multiplier_now × real_move)`, floored at zero, where
+  `multiplier_now` ramps linearly from `MULT_FLOOR` (×1) at purchase to the
+  position's full multiplier at maturity: stocks ×10, crypto ×5 (`MULT_STOCK`,
+  `MULT_CRYPTO`). The full multiplier is stored on the position, so changing
+  the config later doesn't rewrite history.
+- At maturity the position freezes: `src/maturer.js` runs every
+  `MATURE_POLL_MS` (60s), quotes anything past `matures_at`, and stores
+  `matured_price` / `matured_value` at the full multiplier. `/me` and `/sell`
+  also freeze lazily, so a late timer never shows a matured position moving.
+- `/sell` is both "collect" and "sell early": a matured position pays out its
+  frozen value in full; a live one re-quotes and pays out at the current price
+  and current multiplier. A profit is taxed `TAX_RATE` (25%); losses aren't.
+  A position at zero can be "buried" (same endpoint). The receipt and history
+  carry `collected: true|false`.
+- **The tax hires lobbyists.** Every play-money dollar of tax hires one
+  lobbyist for a charity the player picks. In the database and the API these
+  are still called `donations` / `total_donated` (one lobbyist = $1 of tax);
+  the front end never shows them as dollars, because they aren't.
+- `/trickle` reports each charity's share of all lobbyists this quarter.
+  `POOL_USD` is the real ad revenue you've collected; the page shows what each
+  charity's share of it would be by headcount. Update it by hand until ads exist.
+- `DEMO_MODE=true` (the default) makes the site say plainly that the charities
+  are fictional and nothing real is moving. The seed list in `src/charities.js`
+  is deliberately made up for that reason.
 
 ## Endpoints
 
@@ -35,7 +50,7 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
 | POST | `/auth/claim` | ✓ | give a guest account a username + password |
 | GET | `/me` | ✓ | grants today's money if due; portfolio with live values, history, today's crowd picks |
 | POST | `/buy` | ✓ | `{ symbol, amount }` |
-| POST | `/sell` | ✓ | `{ position_id, charity_id }` (charity required only when there's a profit) |
+| POST | `/sell` | ✓ | `{ position_id, charity_id }` — collects a matured position in full, or sells a live one early (charity required only when there's a profit) |
 | GET | `/trickle` | | per-charity shares this quarter + all time |
 | GET | `/leaderboard` | | all-time donations; best lock-in in the last 24h |
 
@@ -53,6 +68,12 @@ Auth is a Bearer JWT in the `Authorization` header. Tokens last 180 days.
 The free Finnhub tier is plenty for a demo. If the site grows, the cheap
 upgrade is a nightly job that stores daily closes, which also enables a true
 "24-hour portfolio change" leaderboard.
+
+One quirk worth knowing: stocks don't trade on weekends, so a stock bought on
+Friday afternoon barely moves before it matures Saturday afternoon (it still
+freezes at Finnhub's last price). Crypto moves all weekend. That's a feature
+until someone says otherwise; a weekday-only clock for stocks would be a
+small change in `game.effectiveMultiplier` and `maturer.js`.
 
 ## Run locally
 
@@ -89,7 +110,8 @@ non-localhost `DATABASE_URL`.
 ```
 src/server.js     express app, CORS, boot-time migrate
 src/routes.js     every endpoint
-src/game.js       the rules as pure functions (day keys, value, tax, tiers, badges)
+src/game.js       the rules as pure functions (day keys, multiplier ramp, value, tax, tiers, ranks)
+src/maturer.js    freezes positions at maturity (timer + lazy)
 src/prices.js     Finnhub / CoinGecko / mock, with a cache
 src/assets.js     the curated tradable list
 src/charities.js  the curated charity list (seeded into the DB)
@@ -103,9 +125,11 @@ scripts/smoke.sh  end-to-end check
 
 Things the demo deliberately leaves out:
 
-- **Charity list.** The seed list is a placeholder. Verify each one's current
-  rating on Charity Navigator (or your grader of choice) and decide a minimum
-  grade. Rows are upserted by slug, so editing `src/charities.js` is enough.
+- **Charity list.** The seed list is fictional. Replace it with real
+  organizations you've vetted (Charity Navigator or your grader of choice, with
+  a minimum grade), then set `DEMO_MODE=false`. Rows are upserted by slug on
+  boot and anything you remove from the file is retired, so editing
+  `src/charities.js` is enough.
 - **Disbursement.** Something like Every.org can pay many charities from one
   pot with receipts. Post those receipts on the Trickle page.
 - **Legal.** Several US states regulate "commercial co-ventures" (businesses
@@ -120,9 +144,9 @@ Things the demo deliberately leaves out:
 - **True 24h leaderboard** — portfolio value now vs 24 hours ago. Needs stored
   price history (nightly closes). The current "best lock-in in the last 24h"
   board is the cheap proxy.
-- **Collectible rewards** — badges exist (Dribble → Deluge, computed from total
-  donated). Making them visible on profiles / share cards, and adding
-  non-donation badges (first bust, 7-day streak, "bought the top"), is UI work.
+- **Collectible rewards** — ranks exist (Intern → Shadow Cabinet, computed
+  from lobbyists hired). Making them visible on share cards, and adding
+  non-lobbying badges (first bust, 7-day streak, "bought the top"), is UI work.
 - **Double-or-nothing** — a roulette-style gamble on locked-in gains that does
   not touch the leaderboards. Keep it strictly play money and purely cosmetic
   to the charity math, or it drifts toward gambling-adjacent territory.

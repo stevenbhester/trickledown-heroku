@@ -5,6 +5,7 @@ const game = require('./game');
 const prices = require('./prices');
 const assets = require('./assets');
 const auth = require('./auth');
+const maturer = require('./maturer');
 
 const router = express.Router();
 
@@ -25,6 +26,35 @@ function publicUser(u) {
   };
 }
 
+// A position as the client sees it. Matured ones use their frozen price;
+// live ones use the quote passed in (null when the lookup failed).
+function shapePosition(p, quote) {
+  const now = Date.now();
+  const matured = !!p.matured_at;
+  const price = matured ? p.matured_price : quote ? quote.price : null;
+  const live = price != null ? game.valueOf(p, price, matured ? new Date(p.matures_at).getTime() : now) : null;
+  if (matured && live) live.value = p.matured_value; // the stored number is the truth
+  return {
+    id: p.id,
+    symbol: p.symbol,
+    name: p.name,
+    asset_type: p.asset_type,
+    multiplier: p.multiplier,
+    invested: p.invested,
+    entry_price: p.entry_price,
+    opened_at: p.opened_at,
+    opened_day: p.opened_day,
+    matures_at: p.matures_at,
+    matured,
+    matured_at: p.matured_at || null,
+    seconds_left: matured ? 0 : Math.max(0, Math.round((new Date(p.matures_at) - now) / 1000)),
+    price,
+    quote_error: price == null,
+    ...(live || { value: null, real_pct: null, swing_pct: null, busted: false }),
+    preview: live ? game.settle({ invested: p.invested, value: live.value }) : null,
+  };
+}
+
 function dayInfo(now = new Date()) {
   const key = game.dayKey(now);
   return {
@@ -42,10 +72,13 @@ router.get('/health', (req, res) => res.json({ ok: true, provider: cfg.priceProv
 
 router.get('/config', (req, res) => {
   res.json({
+    demo: cfg.demoMode,
     daily_base: cfg.dailyBase,
     streak_bonus: cfg.streakBonus,
     daily_cap: cfg.dailyCap,
     tax_rate: cfg.taxRate,
+    hold_hours: cfg.holdHours,
+    mult_floor: cfg.multFloor,
     multipliers: cfg.multipliers,
     tz: cfg.gameTz,
     badges: game.BADGES,
@@ -163,33 +196,18 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
   }
 
   const { rows: open } = await query(
-    'SELECT * FROM positions WHERE user_id = $1 AND status = $2 ORDER BY opened_at DESC', [user.id, 'open'],
+    'SELECT * FROM positions WHERE user_id = $1 AND status = $2 ORDER BY opened_at ASC', [user.id, 'open'],
   );
-  const quotes = await prices.getQuotes(open.map((p) => assets.find(p.symbol)).filter(Boolean));
+  // Freeze anything that matured since the last pass, then quote only what is still live.
+  await maturer.settleMatured(open).catch((e) => console.error('maturer:', e.message));
+  const stillLive = open.filter((p) => !p.matured_at);
+  const quotes = await prices.getQuotes(stillLive.map((p) => assets.find(p.symbol)).filter(Boolean));
 
-  const positions = open.map((p) => {
-    const q = quotes[p.symbol];
-    const live = q ? game.valueOf(p, q.price) : null;
-    return {
-      id: p.id,
-      symbol: p.symbol,
-      name: p.name,
-      asset_type: p.asset_type,
-      multiplier: p.multiplier,
-      invested: p.invested,
-      entry_price: p.entry_price,
-      opened_at: p.opened_at,
-      opened_day: p.opened_day,
-      price: q ? q.price : null,
-      quote_error: !q,
-      ...(live || { value: null, real_pct: null, swing_pct: null, busted: false }),
-      preview: live ? game.settle({ invested: p.invested, value: live.value }) : null,
-    };
-  });
+  const positions = open.map((p) => shapePosition(p, quotes[p.symbol]));
 
   const { rows: history } = await query(
     `SELECT p.id, p.symbol, p.name, p.invested, p.proceeds, p.profit, p.tax, p.tier, p.closed_at, p.closed_day,
-            c.name AS charity_name
+            (p.matured_at IS NOT NULL) AS collected, c.name AS charity_name
        FROM positions p LEFT JOIN charities c ON c.id = p.charity_id
       WHERE p.user_id = $1 AND p.status = 'closed'
       ORDER BY p.closed_at DESC LIMIT 12`,
@@ -214,13 +232,22 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     [user.id, day.key],
   );
 
+  // The back of the coin: where this player's tax has gone, by charity.
+  const { rows: byCharity } = await query(
+    `SELECT c.id, c.name, c.slug, SUM(d.amount)::float8 AS amount, COUNT(*)::int AS times
+       FROM donations d JOIN charities c ON c.id = d.charity_id
+      WHERE d.user_id = $1 GROUP BY c.id ORDER BY amount DESC`,
+    [user.id],
+  );
+
   res.json({
     user: publicUser(user),
     day,
     allowance,
-    rules: { tax_rate: cfg.taxRate, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap },
+    rules: { tax_rate: cfg.taxRate, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
     positions,
     history,
+    donations_by_charity: byCharity,
     crowd: { picks: crowd, ...crowdTotal },
     today_donated: todayGiven.amount,
   });
@@ -230,7 +257,7 @@ router.post('/buy', auth.requireUser, wrap(async (req, res) => {
   const asset = assets.find((req.body || {}).symbol);
   const amount = game.round2(Number((req.body || {}).amount));
   if (!asset) return res.status(400).json({ error: 'Pick something from the list.' });
-  if (!(amount >= 1)) return res.status(400).json({ error: 'Invest at least $1.' });
+  if (!(amount >= 0.01)) return res.status(400).json({ error: 'Invest at least a penny.' });
 
   let quote;
   try { quote = await prices.getQuote(asset); } catch (e) {
@@ -242,15 +269,15 @@ router.post('/buy', auth.requireUser, wrap(async (req, res) => {
     if (u.cash < amount) return { error: `You only have $${u.cash.toFixed(2)} to invest.` };
     await tx.query('UPDATE users SET cash = cash - $1 WHERE id = $2', [amount, u.id]);
     const { rows: [p] } = await tx.query(
-      `INSERT INTO positions (user_id, symbol, name, asset_type, multiplier, invested, entry_price, opened_day)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [u.id, asset.symbol, asset.name, asset.type, asset.multiplier, amount, quote.price, game.dayKey()],
+      `INSERT INTO positions (user_id, symbol, name, asset_type, multiplier, invested, entry_price, opened_day, matures_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + ($9 || ' hours')::interval) RETURNING *`,
+      [u.id, asset.symbol, asset.name, asset.type, asset.multiplier, amount, quote.price, game.dayKey(), String(cfg.holdHours)],
     );
     return { position: p, cash: u.cash - amount };
   });
 
   if (result.error) return res.status(400).json({ error: result.error });
-  res.json({ ok: true, position: result.position, cash: game.round2(result.cash), quote });
+  res.json({ ok: true, position: shapePosition(result.position, quote), cash: game.round2(result.cash), quote });
 }));
 
 router.post('/sell', auth.requireUser, wrap(async (req, res) => {
@@ -262,15 +289,23 @@ router.post('/sell', auth.requireUser, wrap(async (req, res) => {
     'SELECT * FROM positions WHERE id = $1 AND user_id = $2', [positionId, req.user.id],
   );
   if (!p) return res.status(404).json({ error: 'No such position.' });
-  if (p.status !== 'open') return res.status(400).json({ error: 'Already locked in.' });
+  if (p.status !== 'open') return res.status(400).json({ error: 'Already collected.' });
 
-  const asset = assets.find(p.symbol);
-  let quote;
-  try { quote = await prices.getQuote(asset); } catch (e) {
-    return res.status(503).json({ error: `Couldn't get a price for ${p.symbol} right now. Try again in a minute.` });
+  // Past maturity: freeze it now if the timer hasn't yet, then settle at the
+  // frozen price ("collect"). Before maturity: settle at the live price ("sell").
+  await maturer.settleMatured([p]).catch((e) => console.error('maturer:', e.message));
+  let exitPrice;
+  if (p.matured_at) {
+    exitPrice = p.matured_price;
+  } else {
+    const asset = assets.find(p.symbol);
+    try { exitPrice = (await prices.getQuote(asset)).price; } catch (e) {
+      return res.status(503).json({ error: `Couldn't get a price for ${p.symbol} right now. Try again in a minute.` });
+    }
   }
 
-  const live = game.valueOf(p, quote.price);
+  const live = game.valueOf(p, exitPrice, p.matured_at ? new Date(p.matures_at).getTime() : Date.now());
+  if (p.matured_at) live.value = p.matured_value;
   const s = game.settle({ invested: p.invested, value: live.value });
 
   // A profit needs a charity for its tax. A loss doesn't.
@@ -289,12 +324,12 @@ router.post('/sell', auth.requireUser, wrap(async (req, res) => {
     const { rows: [locked] } = await tx.query(
       'SELECT status FROM positions WHERE id = $1 FOR UPDATE', [p.id],
     );
-    if (locked.status !== 'open') return { error: 'Already locked in.' };
+    if (locked.status !== 'open') return { error: 'Already collected.' };
 
     await tx.query(
       `UPDATE positions SET status = 'closed', closed_at = $1, closed_day = $2, exit_price = $3,
               proceeds = $4, profit = $5, tax = $6, charity_id = $7, tier = $8 WHERE id = $9`,
-      [now, day, quote.price, live.value, s.profit, s.tax, charity ? charity.id : null, s.tier, p.id],
+      [now, day, exitPrice, live.value, s.profit, s.tax, charity ? charity.id : null, s.tier, p.id],
     );
     const { rows: [u] } = await tx.query(
       `UPDATE users SET cash = cash + $1, total_donated = total_donated + $2, realized_pnl = realized_pnl + $3,
@@ -324,6 +359,8 @@ router.post('/sell', auth.requireUser, wrap(async (req, res) => {
       real_pct: live.real_pct,
       swing_pct: live.swing_pct,
       busted: live.busted,
+      collected: !!p.matured_at,   // true = matured and collected in full; false = sold early
+      exit_price: exitPrice,
       ...s,
       charity: charity ? { id: charity.id, name: charity.name, slug: charity.slug } : null,
     },
@@ -352,6 +389,7 @@ router.get('/trickle', wrap(async (req, res) => {
   );
   res.json({
     quarter: day.quarter,
+    demo: cfg.demoMode,
     pool_usd: cfg.poolUsd,
     quarter_total: quarterTotal,
     all_time: allTime,

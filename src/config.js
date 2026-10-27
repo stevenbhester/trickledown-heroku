@@ -17,6 +17,12 @@ module.exports = {
   streakBonus: num(process.env.STREAK_BONUS, 10),
   dailyCap: num(process.env.DAILY_CAP, 200),
   taxRate: num(process.env.TAX_RATE, 0.25),
+  // A position lives this long. At maturity its value freezes at that
+  // moment's price until the player collects it.
+  holdHours: num(process.env.HOLD_HOURS, 24),
+  maturePollMs: num(process.env.MATURE_POLL_MS, 60_000),
+  // Multiplier at the moment of purchase; ramps to the full MULT_* at maturity.
+  multFloor: num(process.env.MULT_FLOOR, 1),
   multipliers: {
     stock: num(process.env.MULT_STOCK, 10),
     crypto: num(process.env.MULT_CRYPTO, 5),
@@ -28,4 +34,8 @@ module.exports = {
   quoteCacheMs: num(process.env.QUOTE_CACHE_MS, 60_000),
 
   poolUsd: num(process.env.POOL_USD, 0),
+
+  // While true, the site says plainly that the charities are fictional and no
+  // real money moves. Set DEMO_MODE=false once the charity list is real.
+  demoMode: (process.env.DEMO_MODE || 'true').toLowerCase() !== 'false',
 };
