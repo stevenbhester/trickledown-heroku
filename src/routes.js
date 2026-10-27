@@ -47,6 +47,8 @@ function shapePosition(p, quote) {
     matures_at: p.matures_at,
     matured,
     matured_at: p.matured_at || null,
+    ride_count: p.ride_count || 0,
+    origin_invested: p.origin_invested != null ? p.origin_invested : p.invested,
     seconds_left: matured ? 0 : Math.max(0, Math.round((new Date(p.matures_at) - now) / 1000)),
     price,
     quote_error: price == null,
@@ -216,12 +218,12 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
 
   const { rows: crowd } = await query(
     `SELECT symbol, name, COUNT(*)::int AS buys, SUM(invested)::float8 AS invested
-       FROM positions WHERE opened_day = $1
+       FROM positions WHERE opened_day = $1 AND rolled_from IS NULL
       GROUP BY symbol, name ORDER BY buys DESC, invested DESC LIMIT 5`,
     [day.key],
   );
   const { rows: [crowdTotal] } = await query(
-    'SELECT COUNT(*)::int AS buys, COUNT(DISTINCT user_id)::int AS players FROM positions WHERE opened_day = $1',
+    'SELECT COUNT(*)::int AS buys, COUNT(DISTINCT user_id)::int AS players FROM positions WHERE opened_day = $1 AND rolled_from IS NULL',
     [day.key],
   );
 
@@ -269,8 +271,8 @@ router.post('/buy', auth.requireUser, wrap(async (req, res) => {
     if (u.cash < amount) return { error: `You only have $${u.cash.toFixed(2)} to invest.` };
     await tx.query('UPDATE users SET cash = cash - $1 WHERE id = $2', [amount, u.id]);
     const { rows: [p] } = await tx.query(
-      `INSERT INTO positions (user_id, symbol, name, asset_type, multiplier, invested, entry_price, opened_day, matures_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + ($9 || ' hours')::interval) RETURNING *`,
+      `INSERT INTO positions (user_id, symbol, name, asset_type, multiplier, invested, entry_price, opened_day, matures_at, origin_invested)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + ($9 || ' hours')::interval, $6) RETURNING *`,
       [u.id, asset.symbol, asset.name, asset.type, asset.multiplier, amount, quote.price, game.dayKey(), String(cfg.holdHours)],
     );
     return { position: p, cash: u.cash - amount };
@@ -278,6 +280,49 @@ router.post('/buy', auth.requireUser, wrap(async (req, res) => {
 
   if (result.error) return res.status(400).json({ error: result.error });
   res.json({ ok: true, position: shapePosition(result.position, quote), cash: game.round2(result.cash), quote });
+}));
+
+// Let it ride: roll a matured position's frozen value into a fresh one in the
+// same asset at today's price. No tax, no lobbyists, the clock and the
+// multiplier start over.
+router.post('/ride', auth.requireUser, wrap(async (req, res) => {
+  const positionId = Number((req.body || {}).position_id);
+  if (!positionId) return res.status(400).json({ error: 'Which position?' });
+  const { rows: [p] } = await query('SELECT * FROM positions WHERE id = $1 AND user_id = $2', [positionId, req.user.id]);
+  if (!p) return res.status(404).json({ error: 'No such position.' });
+  if (p.status !== 'open') return res.status(400).json({ error: 'Already collected.' });
+  await maturer.settleMatured([p]).catch((e) => console.error('maturer:', e.message));
+  if (!p.matured_at) return res.status(400).json({ error: "It hasn't matured yet. You can only let a matured position ride." });
+  if (!(p.matured_value >= 0.01)) return res.status(400).json({ error: "There's nothing left to ride." });
+
+  const asset = assets.find(p.symbol);
+  let quote;
+  try { quote = await prices.getQuote(asset); } catch (e) {
+    return res.status(503).json({ error: `Couldn't get a price for ${p.symbol} right now. Try again in a minute.` });
+  }
+  const now = new Date();
+  const day = game.dayKey(now);
+  const profit = game.round2(p.matured_value - p.invested);
+
+  const result = await withTx(async (tx) => {
+    const { rows: [locked] } = await tx.query('SELECT status FROM positions WHERE id = $1 FOR UPDATE', [p.id]);
+    if (locked.status !== 'open') return { error: 'Already collected.' };
+    await tx.query(
+      `UPDATE positions SET status = 'rolled', closed_at = $1, closed_day = $2, exit_price = $3,
+              proceeds = $4, profit = $5, tax = 0, tier = 'Let it ride' WHERE id = $6`,
+      [now, day, p.matured_price, p.matured_value, profit, p.id],
+    );
+    const { rows: [n] } = await tx.query(
+      `INSERT INTO positions (user_id, symbol, name, asset_type, multiplier, invested, entry_price, opened_day, matures_at,
+                              rolled_from, ride_count, origin_invested)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + ($9 || ' hours')::interval, $10, $11, $12) RETURNING *`,
+      [p.user_id, p.symbol, p.name, p.asset_type, p.multiplier, p.matured_value, quote.price, day, String(cfg.holdHours),
+        p.id, (p.ride_count || 0) + 1, p.origin_invested != null ? p.origin_invested : p.invested],
+    );
+    return { position: n };
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json({ ok: true, position: shapePosition(result.position, quote), rolled: { from: p.id, value: p.matured_value, profit }, quote });
 }));
 
 router.post('/sell', auth.requireUser, wrap(async (req, res) => {
@@ -308,13 +353,22 @@ router.post('/sell', auth.requireUser, wrap(async (req, res) => {
   if (p.matured_at) live.value = p.matured_value;
   const s = game.settle({ invested: p.invested, value: live.value });
 
-  // A profit needs a charity for its tax. A loss doesn't.
+  // A profit needs a charity for its tax; a loss doesn't. If the client sent
+  // none (it previewed a loss and the price moved), fall back to the one the
+  // player has hired the most for, then their last pick, then the first on
+  // the list, rather than refusing to close the position.
   let charity = null;
   if (s.tax > 0) {
-    if (!Number.isInteger(charityId)) return res.status(400).json({ error: 'Pick a charity for the tax.' });
-    const { rows } = await query('SELECT * FROM charities WHERE id = $1 AND active', [charityId]);
+    const { rows } = await query(
+      `SELECT c.* FROM charities c
+        LEFT JOIN (SELECT charity_id, SUM(amount) AS total FROM donations WHERE user_id = $2 GROUP BY charity_id) d ON d.charity_id = c.id
+       WHERE c.active
+       ORDER BY (c.id = $1) DESC, (c.id = $3) DESC, d.total DESC NULLS LAST, c.sort
+       LIMIT 1`,
+      [Number.isInteger(charityId) ? charityId : -1, req.user.id, req.user.charity_id || -1],
+    );
     charity = rows[0];
-    if (!charity) return res.status(400).json({ error: 'Pick a charity for the tax.' });
+    if (!charity) return res.status(500).json({ error: 'No charities are set up yet.' });
   }
 
   const now = new Date();

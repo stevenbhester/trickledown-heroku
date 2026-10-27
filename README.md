@@ -24,6 +24,12 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
   and current multiplier. A profit is taxed `TAX_RATE` (25%); losses aren't.
   A position at zero can be "buried" (same endpoint). The receipt and history
   carry `collected: true|false`.
+- `/ride` ("let it ride") is the third option for a matured position: the
+  frozen value is reinvested in the same asset at today's price as a new
+  position (status of the old one becomes `rolled`, which keeps it out of
+  history and the boards). No tax, no lobbyists, the clock and the multiplier
+  ramp start over. `ride_count` and `origin_invested` follow the chain so the
+  UI can say "riding ×3, started with $50".
 - **The tax hires lobbyists.** Every play-money dollar of tax hires one
   lobbyist for a charity the player picks. In the database and the API these
   are still called `donations` / `total_donated` (one lobbyist = $1 of tax);
@@ -51,6 +57,7 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
 | GET | `/me` | ✓ | grants today's money if due; portfolio with live values, history, today's crowd picks |
 | POST | `/buy` | ✓ | `{ symbol, amount }` |
 | POST | `/sell` | ✓ | `{ position_id, charity_id }` — collects a matured position in full, or sells a live one early (charity required only when there's a profit) |
+| POST | `/ride` | ✓ | `{ position_id }` — let a matured position ride: its frozen value becomes a fresh 24h position in the same asset at today's price, untaxed |
 | GET | `/trickle` | | per-charity shares this quarter + all time |
 | GET | `/leaderboard` | | all-time donations; best lock-in in the last 24h |
 
