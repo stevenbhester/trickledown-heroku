@@ -52,6 +52,16 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
     ride-then-sell-early seconds later at the same cached price realized the
     gain at half tax with no risk taken. Without any tax at all, riding was
     strictly better than collecting and the charity never saw a cent.
+- **Day one** would otherwise be "buy, then wait 24 hours". So once a
+  player has invested anything, `/me` offers `vesting`: their shares in
+  Trickle Down Holdings have vested and policy says sell, for `VEST_AMOUNT`
+  of pure profit (a `vested` position with `invested = 0`, kept off the
+  gain boards). It's taxed like any win, which hires their first lobbyists
+  and opens TrickleTown on the spot. Once per account (`users.vested_at`).
+- **Money is shown in thousands.** The database and API deal in units
+  ($100 a day, $40 to build); the front end renders a unit as $1K and a
+  thousand as $1M, one decimal at most, so the numbers feel like a hedge
+  fund's. Real stock prices stay real.
 - **The tax hires lobbyists.** Every play-money dollar of tax hires one
   lobbyist for a charity the player picks. In the database and the API these
   are still called `donations` / `total_donated` (one lobbyist = $1 of tax);
@@ -95,8 +105,10 @@ whole view (`town`), including every card's unlock status for the deck grid.
 | --- | --- | --- | --- |
 | GET | `/health` | | liveness + which price provider is active |
 | GET | `/config` | | rules, badges, today's day key / reset time |
-| GET | `/assets` | | the tradable list (`src/assets.js`) |
-| GET | `/quote/:symbol` | | live price + day change |
+| GET | `/assets` | | the featured list (curated, with moods), plus `count` of the whole universe and `search: true` |
+| GET | `/assets/search?q=` | | up to 25 matches from the universe, ranked: exact ticker, ticker prefix, name prefix, name word, name contains |
+| GET | `/quote/:symbol` | | live price + day change; `?fresh=1` asks for one no older than `FRESH_QUOTE_MS` |
+| GET | `/quotes?symbols=A,B,C` | | up to 12 at once, same `?fresh=1`; what the front end's live ticker polls |
 | GET | `/charities` | | active charities (`src/charities.js`) |
 | POST | `/auth/guest` | | create a guest account, returns a token |
 | POST | `/auth/register` | | username + password |
@@ -104,6 +116,7 @@ whole view (`town`), including every card's unlock status for the deck grid.
 | POST | `/auth/claim` | ✓ | give a guest account a username + password |
 | GET | `/me` | ✓ | grants today's money if due; portfolio with live values, history, today's crowd picks |
 | POST | `/buy` | ✓ | `{ symbol, amount }` |
+| POST | `/vest` | ✓ | `{ charity_id? }` — day one's windfall, once per account: after the first buy, `VEST_AMOUNT` (40) of pure profit from "vested shares", taxed like any win, so the first lobbyists are hired and TrickleTown opens without waiting 24h. Offered on `/me` as `vesting.available` |
 | POST | `/sell` | ✓ | `{ position_id, charity_id }` — collects a matured position in full, or sells a live one early (charity required only when there's a profit) |
 | POST | `/ride` | ✓ | `{ position_id, charity_id? }` — let a matured position ride: profit taxed at half rate now (the other half deferred), the rest becomes a fresh 24h position in the same asset at today's price with the multiplier climbing from where it ended |
 | GET | `/trickle` | | per-charity shares this quarter + all time |
@@ -153,6 +166,16 @@ days and carry the account's `token_version`; a password change or
 - Finnhub calls are budgeted (`FINNHUB_BUDGET`, 50/min of their free 60), so a
   burst degrades to stale quotes instead of a 429 that stalls the maturer.
   `/buy` and `/ride` refuse a stale quote; collecting never needs one.
+- **The live ticker.** After a buy the front end polls `/quotes?fresh=1`
+  every 3 seconds, backing off to once a minute while the page stays open,
+  and starts over fast on the next buy. A fresh quote may be up to
+  `FRESH_QUOTE_MS` (4s) old; each stock in it is one Finnhub call when it
+  isn't. One player with three live stocks at full tilt is ~60 calls a
+  minute, which is the whole free tier, so with more than a couple of
+  simultaneous players the budget runs out and the ticker quietly serves
+  the cached quote until the next minute. Finnhub's paid tiers raise the
+  limit; raise `FINNHUB_BUDGET` to match. Crypto is one batched CoinGecko
+  call regardless.
 - In production the server also refuses to start with `GOOGLE_CERTS_URL`,
   `FINNHUB_URL` or `COINGECKO_URL` set (test hooks).
 - Google: ID tokens are verified against Google's JWKS (RS256 by `kid`),
@@ -172,8 +195,26 @@ days and carry the account's `token_version`; a password change or
   `GUEST_TTL_DAYS` (45) are deleted once a day (`src/housekeeping.js`), with
   their positions, so abandoned guests don't pile up.
 - Plain `http://` is refused in production (Heroku's `x-forwarded-proto`).
+- The front end says all of this to anyone setting a password ("Beta. Don't
+  reuse a password from anywhere else."), including what's not done.
 - Not done: email/password reset (there's no email), 2FA, CAPTCHA. For a game
   with no real money in player accounts, that's a reasonable place to stop.
+
+## The universe
+
+With a Finnhub key, `src/assets.js` loads every US-listed common stock, ETF,
+ADR and REIT on NYSE, Nasdaq, NYSE Arca, NYSE American and Cboe (plain
+tickers only: no warrants, units, preferreds, dotted share classes or OTC),
+plus the top `CRYPTO_TOP` (250) coins by market cap from CoinGecko, skipping
+any coin whose ticker collides with a stock. That's several thousand names.
+The list is stored in the `assets` table, served from there at boot, and
+refreshed from the providers a minute after boot and daily. The curated
+list (with the Calm/Spicy/Unhinged moods) is always present, is what the
+picker shows before you type, and is the whole universe without a live feed
+or with `ASSET_UNIVERSE=curated`. Search is server-side.
+
+A symbol that drops out of the list is treated as delisted: open positions
+freeze at their entry price and can be collected.
 
 ## Prices
 

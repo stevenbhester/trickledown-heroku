@@ -123,6 +123,21 @@ ALTER TABLE positions ADD COLUMN IF NOT EXISTS deferred_tax NUMERIC(14,2) NOT NU
 -- logged price near the mark, so the receipt can say so.
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS matured_late BOOLEAN NOT NULL DEFAULT false;
 
+-- The tradable universe, refreshed daily from the providers (src/assets.js).
+CREATE TABLE IF NOT EXISTS assets (
+  symbol TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  cg TEXT,
+  exchange TEXT,
+  kind TEXT,
+  active BOOLEAN NOT NULL DEFAULT true,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Day one's windfall (POST /vest), once per account.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS vested_at TIMESTAMPTZ;
+
 -- "Use on another device": a short-lived, single-use code that signs the
 -- other device into the same account. Stored hashed.
 CREATE TABLE IF NOT EXISTS link_codes (

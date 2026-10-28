@@ -2,7 +2,8 @@ require('dotenv').config();
 
 const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
 
-const finnhubKey = process.env.FINNHUB_API_KEY || '';
+// Trimmed: a key pasted with a trailing space or newline is a 401 from Finnhub.
+const finnhubKey = (process.env.FINNHUB_API_KEY || '').trim();
 const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
 
 module.exports = {
@@ -27,6 +28,10 @@ module.exports = {
   // Letting a matured winner ride is taxed too, at this fraction of TAX_RATE.
   // The rest is deferred: due if the ride is sold early, forgiven at maturity.
   rideTaxFactor: num(process.env.RIDE_TAX_FACTOR, 0.5),
+  // Day one's windfall: after the first buy, the player's shares in Trickle
+  // Down Holdings vest and must be sold, for this much pure profit. The tax
+  // on it hires their first lobbyists and opens TrickleTown. 0 disables it.
+  vestAmount: num(process.env.VEST_AMOUNT, 40),
   // A ride's multiplier keeps climbing, one base multiplier per day, for this
   // many rides; after that it rides flat at the cap (stocks ×30, crypto ×15).
   rideMaxSteps: num(process.env.RIDE_MAX_STEPS, 2),
@@ -42,8 +47,15 @@ module.exports = {
   },
 
   priceProvider: process.env.PRICE_PROVIDER || (finnhubKey ? 'live' : 'mock'),
+  // 'all' = every US-listed stock/ETF Finnhub knows plus the top coins, loaded
+  // daily (needs the live feed); 'curated' = just src/assets.js's list.
+  assetUniverse: (process.env.ASSET_UNIVERSE || 'all').toLowerCase() === 'curated' ? 'curated' : 'all',
+  cryptoTop: num(process.env.CRYPTO_TOP, 250),
+  // A "fresh" quote (the live ticker after a buy) may be this old before we
+  // ask the provider again; the ordinary cache is QUOTE_CACHE_MS.
+  freshQuoteMs: num(process.env.FRESH_QUOTE_MS, 4_000),
   finnhubKey,
-  coingeckoKey: process.env.COINGECKO_API_KEY || '',
+  coingeckoKey: (process.env.COINGECKO_API_KEY || '').trim(),
   quoteCacheMs: num(process.env.QUOTE_CACHE_MS, 60_000),
   // Outbound Finnhub calls we allow ourselves per minute (their free tier is 60).
   finnhubBudget: num(process.env.FINNHUB_BUDGET, 50),

@@ -275,6 +275,32 @@ it." It didn't.
   device. Guests included, so nobody has to invent a password to try the
   game on their phone.
 
+- **Landing page.** Hero, three one-liners, "Take the employee training"
+  above the ways in (training taken first ends in Create an account / Play
+  as a guest / Sign in), then those two big buttons with Sign in as a line
+  under them. Setting a password shows the honest beta note.
+
+- **Day one was bland** (buy, then wait 24 hours). Now the first buy vests
+  the player's shares in Trickle Down Holdings: an internal-memo sheet,
+  "Sell. It's policy.", $40K of pure profit, $10K of tax, ten-ish lobbyists,
+  and TrickleTown opens through the same first-hire ceremony and tour on the
+  spot. Once per account; the `vested` position sits off the gain boards.
+- **Everything is in thousands now.** $100K a day, $1.2M in play, $40K to
+  build, $1K a head for lobbyists; one decimal at most, under $0.1K shown
+  in plain dollars. Real stock prices stay real.
+
+- **The universe.** The curated 52 became every US-listed stock and ETF on
+  the real exchanges plus the top 250 coins, loaded daily from the
+  providers into an `assets` table and searched server-side. The curated
+  list stays as the featured set with its moods.
+- **Movement right away.** After a buy the front end polls fresh quotes
+  every 3 seconds, backing off to a minute; values are recomputed on the
+  client with the server's formula, so the coin and rows move without a
+  reload. The Finnhub budget caps the spend; a paid tier raises it.
+- **Landing scenery.** A tilted heads coin with a sample portfolio on the
+  right, a tails village on the left, a crowd of lobbyists, and a faint rain
+  of bills in the gutters, all inline SVG. Phones get the rain only.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

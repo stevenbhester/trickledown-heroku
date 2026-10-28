@@ -21,6 +21,8 @@ const RL = {
   trade: limit({ name: 'trade', max: 60, windowMs: 60e3 }),
   // Reads that cost a query or a price lookup: generous, but not unlimited.
   read: limit({ name: 'read', max: 120, windowMs: 60e3, message: 'Slow down. Try again in a minute.' }),
+  // The live ticker polls every few seconds right after a buy.
+  quote: limit({ name: 'quote', max: 240, windowMs: 60e3, message: 'Slow down. Try again in a minute.' }),
   social: limit({ name: 'social', max: 30, windowMs: 15 * 60e3, message: 'That is a lot of friends in a short time. Try again in 15 minutes.' }),
 };
 
@@ -159,15 +161,34 @@ router.get('/config', (req, res) => {
   });
 });
 
+// The picker's starting list (the curated set), plus how big the whole
+// universe is. Everything else is found through /assets/search.
 router.get('/assets', (req, res) => {
-  res.json({ assets: assets.ASSETS.map(({ cg, ...a }) => a) });
+  res.json({ assets: assets.CURATED.map(({ cg, ...a }) => a), count: assets.size(), search: true, source: assets.source() });
 });
 
-router.get('/quote/:symbol', RL.read, wrap(async (req, res) => {
+router.get('/assets/search', RL.read, (req, res) => {
+  const q = String(req.query.q || '').slice(0, 40);
+  res.json({ q, assets: assets.search(q, 25).map(({ cg, ...a }) => a) });
+});
+
+// Live prices for a handful of symbols at once: the ticker after a buy.
+// ?fresh=1 asks for quotes no older than FRESH_QUOTE_MS (4s); the provider
+// budget decides whether it actually gets them.
+router.get('/quotes', RL.quote, wrap(async (req, res) => {
+  const symbols = String(req.query.symbols || '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean).slice(0, 12);
+  const list = symbols.map((x) => assets.find(x)).filter(Boolean);
+  const fresh = req.query.fresh === '1';
+  const quotes = await prices.getQuotes(list, fresh ? { maxAgeMs: cfg.freshQuoteMs } : {});
+  res.json({ quotes, at: new Date().toISOString() });
+}));
+
+router.get('/quote/:symbol', RL.quote, wrap(async (req, res) => {
   const asset = assets.find(req.params.symbol);
   if (!asset) return res.status(404).json({ error: 'Not in the game. Pick something from the list.' });
   try {
-    const q = await prices.getQuote(asset);
+    const q = req.query.fresh === '1' ? (await prices.getQuotes([asset], { maxAgeMs: cfg.freshQuoteMs }))[asset.symbol] : await prices.getQuote(asset);
+    if (!q) throw new Error('no price');
     res.json({ symbol: asset.symbol, ...q });
   } catch (e) {
     res.status(503).json({ error: `Couldn't get a price for ${asset.symbol} right now. Try again in a minute.` });
@@ -501,10 +522,10 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
 
   const { rows: history } = await query(
     `SELECT p.id, p.symbol, p.name, p.invested, p.proceeds, p.profit, p.tax, p.tier, p.closed_at, p.closed_day,
-            (p.matured_at IS NOT NULL) AS collected, (p.status = 'rolled') AS rode, c.name AS charity_name,
+            (p.matured_at IS NOT NULL) AS collected, (p.status = 'rolled') AS rode, (p.status = 'vested') AS vested, c.name AS charity_name,
             (SELECT SUM(d.amount) FROM donations d WHERE d.position_id = p.id)::float8 AS lobbyists
        FROM positions p LEFT JOIN charities c ON c.id = p.charity_id
-      WHERE p.user_id = $1 AND p.status IN ('closed', 'rolled')
+      WHERE p.user_id = $1 AND p.status IN ('closed', 'rolled', 'vested')
       ORDER BY p.closed_at DESC LIMIT 12`,
     [user.id],
   );
@@ -528,6 +549,11 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
       WHERE f.user_id = $1 GROUP BY u.username ORDER BY u.username LIMIT 8`,
     [user.id, day.key],
   );
+
+  // Day one's windfall is offered once the player has bought something.
+  const vesting = cfg.vestAmount > 0 && !user.vested_at
+    ? { available: (await query('SELECT 1 FROM positions WHERE user_id = $1 LIMIT 1', [user.id])).rows.length > 0, amount: cfg.vestAmount }
+    : null;
 
   const { rows: [todayGiven] } = await query(
     `SELECT COALESCE(SUM(d.amount), 0)::float8 AS amount FROM donations d
@@ -553,7 +579,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     user: { ...publicUser(user), quarter_donated: game.round2(quarterDonated) },
     day,
     allowance,
-    rules: { tax_rate: cfg.taxRate, ride_tax_factor: cfg.rideTaxFactor, ride_max_steps: cfg.rideMaxSteps, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
+    rules: { tax_rate: cfg.taxRate, ride_tax_factor: cfg.rideTaxFactor, ride_max_steps: cfg.rideMaxSteps, vest_amount: cfg.vestAmount, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
     positions,
     history,
     town: townView(user),
@@ -561,6 +587,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     crowd: { picks: crowd, ...crowdTotal, friends: friendsToday.map((r) => ({ username: r.username, symbols: Array.isArray(r.symbols) ? r.symbols : String(r.symbols).replace(/[{}"]/g, '').split(',').filter(Boolean) })) },
     friend_count: user.friend_count,
     today_donated: todayGiven.amount,
+    vesting,
     token: renewedToken,
   });
 }));
@@ -673,6 +700,69 @@ router.post('/ride', auth.requireUser, RL.trade, wrap(async (req, res) => {
     user: publicUser(result.user),
     rolled: { from: p.id, value: p.matured_value, profit: s.profit, tax: s.tax, rate, deferred, lobbyists, hire_cost: hireCost, net: s.net, tier: s.tier, mult_floor: mults.floor, multiplier: mults.ceiling, charity: charity ? { id: charity.id, name: charity.name } : null },
     quote,
+  });
+}));
+
+// Day one's windfall: once the player has invested something, their shares
+// in Trickle Down Holdings "vest" and company policy says sell, today, for
+// VEST_AMOUNT of pure profit. Taxed like any win, so it hires their first
+// lobbyists and opens TrickleTown without waiting 24 hours for a real one.
+router.post('/vest', auth.requireUser, RL.trade, wrap(async (req, res) => {
+  if (!(cfg.vestAmount > 0)) return res.status(404).json({ error: 'Nothing to vest.' });
+  const charityId = Number((req.body || {}).charity_id);
+  const now = new Date();
+  const day = game.dayKey(now);
+  const amount = game.round2(cfg.vestAmount);
+  const s = game.settle({ invested: 0, value: amount });
+  const hireCost = Town.hireCost(req.user.town || Town.fresh());
+  const lobbyists = game.round2(s.tax / hireCost);
+  const charity = await pickCharity(req.user, charityId);
+  if (!charity) return res.status(500).json({ error: 'No charities are set up yet.' });
+
+  const result = await withTx(async (tx) => {
+    const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    if (u.vested_at) return { error: 'Your shares already vested. Once per associate. Policy.' };
+    const { rows: bought } = await tx.query('SELECT 1 FROM positions WHERE user_id = $1 LIMIT 1', [u.id]);
+    if (!bought.length) return { error: 'Shares vest once you have invested something. Policy.' };
+    const { rows: [p] } = await tx.query(
+      `INSERT INTO positions (user_id, symbol, name, asset_type, multiplier, mult_floor, invested, entry_price, opened_day, matures_at,
+                              matured_at, matured_price, matured_value, origin_invested,
+                              status, closed_at, closed_day, exit_price, proceeds, profit, tax, charity_id, tier)
+       VALUES ($1, 'TDH', 'Trickle Down Holdings', 'stock', 1, 1, 0, 0, $2, now(), now(), 0, $3, 0,
+               'vested', now(), $2, 0, $3, $4, $5, $6, 'Vested') RETURNING *`,
+      [u.id, day, amount, s.profit, s.tax, charity.id],
+    );
+    const { rows: [u2] } = await tx.query(
+      `UPDATE users SET cash = cash + $1, total_donated = total_donated + $2, realized_pnl = realized_pnl + $3,
+              charity_id = $4, vested_at = now() WHERE id = $5 RETURNING *`,
+      [s.net, lobbyists, s.profit, charity.id, u.id],
+    );
+    await tx.query(
+      'INSERT INTO donations (user_id, charity_id, position_id, amount, quarter) VALUES ($1, $2, $3, $4, $5)',
+      [u.id, charity.id, p.id, lobbyists, game.quarterKey(day)],
+    );
+    return { user: u2, position: p };
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  const user = result.user;
+  user.friend_count = await friendCount(user.id);
+  // The town opens now; deal today's cards so there's something behind the flip.
+  if (Town.isUnlocked(user.total_donated)) {
+    user.town = user.town || Town.fresh();
+    Town.tick(user.town, townCtx(user, { day }));
+    Town.ensureIssues(user.town, townCtx(user, { day }));
+    await query('UPDATE users SET town = $1 WHERE id = $2', [user.town, user.id]);
+  }
+  res.json({
+    ok: true,
+    user: publicUser(user),
+    town: townView(user),
+    receipt: {
+      position_id: result.position.id, symbol: 'TDH', name: 'Trickle Down Holdings', invested: 0, value: amount,
+      real_pct: null, swing_pct: null, busted: false, collected: true, vested: true, exit_price: 0,
+      ...s, tier: 'Vested', lobbyists, hire_cost: hireCost,
+      charity: { id: charity.id, name: charity.name, slug: charity.slug },
+    },
   });
 }));
 

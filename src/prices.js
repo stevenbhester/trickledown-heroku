@@ -119,15 +119,22 @@ async function pooled(items, n, fn) {
 }
 
 // Returns a map symbol -> quote | null (null when nothing, not even a stale
-// quote, is available).
-async function getQuotes(assets) {
+// quote, is available). maxAgeMs asks for fresher-than-usual quotes (the live
+// ticker after a buy); the provider budget still applies, so a burst of
+// fresh requests degrades to the cached quote rather than a 429.
+async function getQuotes(assets, { maxAgeMs } = {}) {
   const unique = [...new Map(assets.map((a) => [a.symbol, a])).values()];
   const out = {};
   const need = [];
+  const now = Date.now();
+  // A valid-but-not-fresh-enough quote is the fallback if the provider says no.
+  const valid = new Map();
   for (const a of unique) {
     const hit = cache.get(a.symbol);
-    if (hit && hit.expires > Date.now()) out[a.symbol] = hit.quote; else need.push(a);
+    const fresh = hit && hit.expires > now && (maxAgeMs == null || now - new Date(hit.quote.at).getTime() <= maxAgeMs);
+    if (fresh) out[a.symbol] = hit.quote; else { need.push(a); if (hit && hit.expires > now) valid.set(a.symbol, hit.quote); }
   }
+  const fallback = (symbol) => valid.get(symbol) || staleFor(symbol);
   if (!need.length) return out;
 
   if (cfg.priceProvider === 'mock') {
@@ -144,13 +151,13 @@ async function getQuotes(assets) {
     const missing = [];
     for (const a of coins) { if (got[a.symbol]) out[a.symbol] = remember(a.symbol, got[a.symbol]); else missing.push(a); }
     const fb = await pooled(missing, 3, (a) => finnhubQuote(`BINANCE:${a.symbol}USDT`));
-    missing.forEach((a, k) => { out[a.symbol] = fb[k].ok ? remember(a.symbol, fb[k].v) : staleFor(a.symbol); });
+    missing.forEach((a, k) => { out[a.symbol] = fb[k].ok ? remember(a.symbol, fb[k].v) : fallback(a.symbol); });
   }
   if (stocks.length) {
     const res = await pooled(stocks, 5, (a) => finnhubQuote(a.symbol));
     stocks.forEach((a, k) => {
       if (res[k].ok) out[a.symbol] = remember(a.symbol, res[k].v);
-      else { console.warn('finnhub:', a.symbol, res[k].e.message); out[a.symbol] = staleFor(a.symbol); }
+      else { if (!valid.has(a.symbol)) console.warn('finnhub:', a.symbol, res[k].e.message); out[a.symbol] = fallback(a.symbol); }
     });
   }
   return out;

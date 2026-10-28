@@ -5,6 +5,8 @@ const { migrate } = require('./migrate');
 const routes = require('./routes');
 const maturer = require('./maturer');
 const housekeeping = require('./housekeeping');
+const assets = require('./assets');
+const { pool } = require('./db');
 const auth = require('./auth');
 
 // Refuse to run a real deployment with development settings.
@@ -55,6 +57,7 @@ app.use((err, req, res, next) => {
 
 migrate()
   .then(() => {
+    assets.start(pool);
     maturer.start(cfg.maturePollMs);
     housekeeping.start();
     app.listen(cfg.port, () => {

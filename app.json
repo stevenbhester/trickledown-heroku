@@ -18,8 +18,12 @@
     "POOL_USD": { "description": "Real ad revenue collected this quarter, shown on the Lobby page.", "value": "0" },
     "RIDE_TAX_FACTOR": { "description": "Letting a winner ride is taxed at TAX_RATE times this (0.5 = half rate).", "value": "0.5", "required": false },
     "GUEST_TTL_DAYS": { "description": "Guest accounts that never hired a lobbyist are deleted after this many idle days.", "value": "45", "required": false },
-    "FINNHUB_BUDGET": { "description": "Outbound Finnhub calls per minute we allow ourselves (their free tier is 60).", "value": "50", "required": false },
     "TOWN_INCOME_CAP": { "description": "TrickleTown income can push the daily allowance past DAILY_CAP by at most this much.", "value": "40", "required": false },
+    "ASSET_UNIVERSE": { "description": "'all' = every US-listed stock/ETF plus the top coins, refreshed daily (needs a Finnhub key); 'curated' = just the hand-picked list.", "value": "all", "required": false },
+    "CRYPTO_TOP": { "description": "How many coins by market cap to include from CoinGecko.", "value": "250", "required": false },
+    "FINNHUB_BUDGET": { "description": "Outbound Finnhub calls per minute we allow ourselves. Raise it on a paid Finnhub tier.", "value": "50", "required": false },
+    "FRESH_QUOTE_MS": { "description": "How old a 'fresh' quote for the live ticker may be before asking the provider again.", "value": "4000", "required": false },
+    "VEST_AMOUNT": { "description": "Day one's windfall: pure profit from vested shares after the first buy (0 disables).", "value": "40", "required": false },
     "RIDE_MAX_STEPS": { "description": "How many rides keep raising the multiplier (stocks ×10 → ×20 → ×30) before it runs flat.", "value": "2", "required": false }
   }
 }
