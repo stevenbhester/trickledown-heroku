@@ -27,7 +27,7 @@ heroku config:set JWT_SECRET="$(openssl rand -hex 32)"
 heroku config:set CORS_ORIGIN="https://stevenbhester.github.io,https://trickledown.stevenhester.com"
 heroku config:set FINNHUB_API_KEY="your_finnhub_key"
 heroku config:set GAME_TZ=America/Chicago LAUNCH_DATE=$(date +%F) DEMO_MODE=true
-heroku config:set ADMIN_USERNAMES=steven          # your username(s), comma-separated; grant/reset from Account
+heroku config:set ADMIN_USERNAMES=steven          # your username(s), comma-separated; grant, cards and reset from Account
 git push heroku main
 heroku logs --tail                        # should say: Trickle Down API on :PORT (prices: live, …)
 ```

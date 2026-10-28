@@ -169,19 +169,19 @@
     { id: 'coffee_cups', title: 'The coffee cups', setup: 'The break room is out of cups again. There is a theory about where they go.', ask: 'How do you solve the cups?',
       preston: { label: 'One cup per person, per day', line: 'A cup policy. Enforced by a cup registry. Staffed by a cup officer.', fx: { income: 1, happy: -2 }, sets: 'cup_policy' },
       dolores: { label: 'Buy mugs with their names on', line: "Twelve dollars. They'll wash them. They'll guard them. They'll bring them to Lobbyfest.", fx: { cash: -6, happy: 2 }, sets: 'mugs' } },
-    { id: 'intern', title: 'An intern', setup: 'A college student wants to learn about lobbying. She is already better at it than most of the staff.', ask: 'Does she get paid?',
+    { id: 'intern', needs: { days_played: 2 }, title: 'An intern', setup: 'A college student wants to learn about lobbying. She is already better at it than most of the staff.', ask: 'Does she get paid?',
       preston: { label: 'Unpaid internship', line: 'She is paid in experience. Experience is priceless, which is why we are not pricing it.', fx: { cash: 5, happy: -2 }, sets: 'unpaid_intern' },
       dolores: { label: 'Pay the intern', line: "Minimum wage. She'll remember who paid her. So will her very online friends.", fx: { cash: -8, happy: 1 }, sets: 'paid_intern' } },
-    { id: 'holiday', title: 'A holiday request', setup: 'The lobbyists would like the day off for a holiday. The holiday is "Thursday."', ask: 'Does Thursday happen?',
+    { id: 'holiday', needs: { days_played: 3 }, title: 'A holiday request', setup: 'The lobbyists would like the day off for a holiday. The holiday is "Thursday."', ask: 'Does Thursday happen?',
       preston: { label: 'Mark it with a sale', line: 'Thursday Sale. Fifteen percent off at the Company Store, redeemable on Thursdays, while working.', fx: { income: 2, happy: -3 }, sets: 'holiday_sale' },
       dolores: { label: 'Give them the day', line: 'Everyone gets Thursday. Thursday is now a thing. You did that.', fx: { cash: -8, happy: 4 }, sets: 'holiday_off' } },
-    { id: 'suggestion_box', title: 'A suggestion box', setup: 'Someone has suggested a suggestion box. The suggestion was made verbally, which is the problem.', ask: 'Does the box get read?',
+    { id: 'suggestion_box', needs: { days_played: 4 }, title: 'A suggestion box', setup: 'Someone has suggested a suggestion box. The suggestion was made verbally, which is the problem.', ask: 'Does the box get read?',
       preston: { label: 'Install it. Never open it.', line: 'The box is the message. The contents are a liability.', fx: { happy: -1 }, sets: 'box_ignored' },
       dolores: { label: 'Install it, read it Fridays', line: "I'll read them to you. You'll hate some of them. That's the point.", fx: { cash: -2, happy: 2 }, sets: 'box_read' } },
-    { id: 'lawn', title: 'The lawn', setup: 'The patch of grass behind Housing has not been mowed. Something is living in it.', ask: 'What do you do with the lawn?',
+    { id: 'lawn', needs: { days_played: 5 }, title: 'The lawn', setup: 'The patch of grass behind Housing has not been mowed. Something is living in it.', ask: 'What do you do with the lawn?',
       preston: { label: 'Lay astroturf', line: 'Green forever. Never grows, never dies, never asks for anything. My ideal tenant.', fx: { cash: -10, income: 1 }, sets: 'astroturf' },
       dolores: { label: 'Let it grow wild', line: "Leave it. Whatever's in there is paying more attention to the lobbyists than you are.", fx: { health: 1 }, sets: 'wild_lawn' } },
-    { id: 'name_badges', title: 'Name badges', setup: 'HR has ordered name badges. HR would like to know what goes on them.', ask: 'What goes on the badges?',
+    { id: 'name_badges', needs: { days_played: 6 }, title: 'Name badges', setup: 'HR has ordered name badges. HR would like to know what goes on them.', ask: 'What goes on the badges?',
       preston: { label: 'Numbers, not names', line: 'Names change. Numbers scale. Lobbyist 0047 reports to Lobbyist 0012, forever.', fx: { income: 1, happy: -3 }, sets: 'numbered' },
       dolores: { label: 'First names, big type', line: 'First names. Big type. Dolores, in big type, is a lot. I accept this.', fx: { cash: -4, happy: 2 }, sets: 'named' } },
 
@@ -221,13 +221,13 @@
       dolores: { label: 'Give the names back', line: 'New badges. First names. 0003 is keeping the podcast name. I negotiated.', fx: { cash: -4, happy: 6 } } },
 
     // Round three: more small ones, and cards that need friends or a streak.
-    { id: 'wifi', title: 'The wifi password', setup: 'Everyone keeps asking for the wifi password. It is on a sticky note on the router, the sticky note is the only copy, and the router is in a closet nobody can find.', ask: 'How do people get the password?',
+    { id: 'wifi', needs: { days_played: 3 }, title: 'The wifi password', setup: 'Everyone keeps asking for the wifi password. It is on a sticky note on the router, the sticky note is the only copy, and the router is in a closet nobody can find.', ask: 'How do people get the password?',
       preston: { label: 'Change it weekly, sell the new one', line: 'Fifty cents a week. Connectivity is a privilege. A tiered privilege.', fx: { income: 1, happy: -2 }, sets: 'wifi_paid' },
       dolores: { label: 'Paint it on the wall, free', line: "Paint it on the wall. Big type. You know how I feel about big type.", fx: { happy: 2 }, sets: 'wifi_free' } },
-    { id: 'dress_code', title: 'A dress code', setup: 'HR would like a dress code. HR has drawn a diagram. The diagram has a lot of arrows.', ask: 'Is there a dress code?',
+    { id: 'dress_code', needs: { days_played: 7 }, title: 'A dress code', setup: 'HR would like a dress code. HR has drawn a diagram. The diagram has a lot of arrows.', ask: 'Is there a dress code?',
       preston: { label: 'Mandatory blazers, deducted from pay', line: 'Navy. Company crest. Deducted from pay, so technically they own them.', fx: { cash: -10, happy: -3 }, sets: 'blazers' },
       dolores: { label: 'Casual Fridays', line: 'Casual Fridays. Then casual Thursdays. I have a roadmap.', fx: { happy: 3 }, sets: 'casual' } },
-    { id: 'cat', title: 'A cat', setup: 'A cat has moved into the lobby. She has chosen the good chair. Nobody has objected.', ask: 'What\'s the cat\'s job?',
+    { id: 'cat', needs: { days_played: 4 }, title: 'A cat', setup: 'A cat has moved into the lobby. She has chosen the good chair. Nobody has objected.', ask: 'What\'s the cat\'s job?',
       preston: { label: 'Charge for petting', line: 'A dollar a pet. She is a revenue stream with whiskers.', fx: { income: 1, happy: -1 }, sets: 'cat_fee' },
       dolores: { label: "She's the mascot now", line: 'Her name is Comptroller. She has a badge. It says "Comptroller."', fx: { cash: -4, happy: 4 }, sets: 'cat_mascot' } },
     { id: 'wifi_leak', needs: { flag: 'wifi_paid' }, title: 'Someone shared the password', setup: "It's on a lamppost. It's on the lampposts in the next town. It's on a billboard, and the billboard was not cheap.", ask: 'What do you do now that everyone has it?',
@@ -267,19 +267,19 @@
 
     // Round four: more small daily ones with consequences, more follow-ups,
     // and some cards that only a thriving town ever sees.
-    { id: 'lunch_hour', title: 'The lunch hour', setup: 'Nobody can agree on how long lunch is. HR has a stopwatch. HR has always had a stopwatch.', ask: 'How long is lunch?',
+    { id: 'lunch_hour', needs: { days_played: 5 }, title: 'The lunch hour', setup: 'Nobody can agree on how long lunch is. HR has a stopwatch. HR has always had a stopwatch.', ask: 'How long is lunch?',
       preston: { label: 'Thirty minutes, timed', line: 'Thirty minutes. The stopwatch is already here. It would be a shame to waste it.', fx: { income: 1, happy: -3 }, sets: 'short_lunch' },
       dolores: { label: 'An hour, outside', line: 'An hour. Outside. Sunlight is free and nobody has found a way to invoice it yet.', fx: { happy: 3, health: 1 }, sets: 'long_lunch' } },
-    { id: 'elevator', title: 'The elevator', setup: 'The elevator stopped between floors. The lobbyists inside have formed a committee.', ask: 'What happens to the elevator?',
+    { id: 'elevator', needs: { days_played: 8 }, title: 'The elevator', setup: 'The elevator stopped between floors. The lobbyists inside have formed a committee.', ask: 'What happens to the elevator?',
       preston: { label: 'Close it; stairs are cardio', line: 'Close it. Call it a wellness initiative. Put a poster on every landing.', fx: { cash: 5, health: -2, happy: -2 }, sets: 'stairs' },
       dolores: { label: 'Fix the elevator', line: 'Fix the elevator. The committee has drafted bylaws. It is getting serious in there.', fx: { cash: -18, happy: 3 }, sets: 'elevator_fixed' } },
-    { id: 'newsletter', title: 'A company newsletter', setup: 'Someone wants to start a newsletter. "The Trickle." The name was not negotiable.', ask: 'Who runs the newsletter?',
+    { id: 'newsletter', needs: { days_played: 9 }, title: 'A company newsletter', setup: 'Someone wants to start a newsletter. "The Trickle." The name was not negotiable.', ask: 'Who runs the newsletter?',
       preston: { label: 'Fill it with sponsored content', line: 'Every issue brought to you by the Company Store. Every article, also, about the Company Store.', fx: { income: 1, happy: -1 }, sets: 'newsletter_ads' },
       dolores: { label: 'Let them write it', line: 'Their newsletter. Their words. You will not enjoy every issue, which is how you know it is working.', fx: { happy: 3 }, sets: 'newsletter_free' } },
-    { id: 'fire_drill', title: 'Fire drill', setup: 'The annual fire drill is due. The fire marshal has left three voicemails. The third was just sighing.', ask: 'Does the drill happen?',
+    { id: 'fire_drill', needs: { days_played: 10 }, title: 'Fire drill', setup: 'The annual fire drill is due. The fire marshal has left three voicemails. The third was just sighing.', ask: 'Does the drill happen?',
       preston: { label: 'Sign the form, skip the drill', line: 'Everyone knows where the door is. It is the big one that says "door."', fx: { cash: 4, health: -1 }, sets: 'no_drill' },
       dolores: { label: 'Run the drill', line: 'Twenty minutes. Everybody outside. The cat goes first; she has made that clear.', fx: { cash: -3, health: 2 } } },
-    { id: 'holiday_party', title: 'The holiday party', setup: 'There is a budget line for a party. It is a small line. It has a question mark next to it.', ask: 'What kind of party is it?',
+    { id: 'holiday_party', needs: { days_played: 12 }, title: 'The holiday party', setup: 'There is a budget line for a party. It is a small line. It has a question mark next to it.', ask: 'What kind of party is it?',
       preston: { label: 'Cash bar, mandatory', line: 'Attendance is required. Drinks are not. That is where the margin lives.', fx: { cash: 8, happy: -4 } },
       dolores: { label: 'Open bar, optional', line: 'Nobody has to come. Everybody will. Budget for that.', fx: { cash: -25, happy: 9, health: -1 } } },
     { id: 'newsletter_expose', needs: { flag: 'newsletter_free' }, title: 'The newsletter ran an exposé', setup: 'Issue four is about you. It is well sourced. One of the sources is the cat.', ask: 'How do you answer the exposé?',
@@ -358,13 +358,15 @@
   }
 
   function fresh() {
-    return { v: 4, day: null, happiness: 55, health: 70, perks: 0, plots: { housing: null, square: null }, upgrades: { housing: [], square: [] }, built: { housing: null, square: null }, issues: [], report: null, played: [], flags: [], last: {} };
+    return { v: 4, day: null, happiness: 55, health: 70, perks: 0, plots: { housing: null, square: null }, upgrades: { housing: [], square: [] }, built: { housing: null, square: null }, issues: [], report: null, played: [], flags: [], last: {}, days: 0, admin_open: [] };
   }
   function migrate(t) {
     if (!t.upgrades) t.upgrades = { housing: [], square: [] };
     if (!t.played) t.played = [];
     if (!t.flags) t.flags = [];
     if (!t.last) t.last = {};
+    if (t.days == null) t.days = t.day ? 1 : 0;        // days the village has been visited
+    if (!t.admin_open) t.admin_open = [];               // card ids an admin forced open ('*' = all)
     if (!t.built) t.built = { housing: t.plots.housing ? t.day : null, square: t.plots.square ? t.day : null };
     return t;
   }
@@ -407,8 +409,11 @@
 
   // --- Cards and what unlocks them ---------------------------------------------
 
+  const adminOpen = (t, id) => !!t.admin_open && (t.admin_open.includes('*') || t.admin_open.includes(id));
+
   function needsMet(needs, t, ctx, slot = null) {
     if (!needs) return true;
+    if (needs.days_played != null && !((t.days || 0) >= needs.days_played)) return false;
     if (needs.days != null && !(slot && t.built && t.built[slot] && dayDiff(t.built[slot], ctx.day) >= needs.days)) return false;
     if (needs.cash != null && !((ctx.cash || 0) >= needs.cash)) return false;
     if (needs.lobbyists != null && !((ctx.lobbyists || 0) >= needs.lobbyists)) return false;
@@ -424,17 +429,25 @@
     return true;
   }
 
-  function needsText(needs) {
-    if (!needs) return 'Everyone gets this one.';
+  // t and ctx are optional: with them the text says where you stand
+  // ("play 5 days; you've played 2").
+  function needsText(needs, t = null, ctx = null) {
+    if (!needs) {
+      const n = ISSUES.filter((i) => !i.needs).length;
+      const seen = t ? ISSUES.filter((i) => !i.needs && t.played.includes(i.id)).length : null;
+      return `Daily headline: everyone gets one of these ${n} each day${seen != null ? ` (you've played ${seen} of ${n})` : ''}.`;
+    }
     const parts = [];
+    const have = (v) => (v == null ? '' : ` (you: ${v})`);
+    if (needs.days_played != null) parts.push(`play ${needs.days_played} day${needs.days_played === 1 ? '' : 's'}${t ? have(t.days || 0) : ''}`);
     if (needs.days != null) parts.push(`${needs.days} day${needs.days === 1 ? '' : 's'} after building`);
-    if (needs.cash != null) parts.push(`have $${needs.cash}K on the coin at dawn`);
-    if (needs.lobbyists != null) parts.push(`hire ${needs.lobbyists} lobbyists, career`);
-    if (needs.friends != null) parts.push(`have ${needs.friends} friend${needs.friends === 1 ? '' : 's'}`);
-    if (needs.streak != null) parts.push(`a ${needs.streak}-day streak`);
+    if (needs.cash != null) parts.push(`have $${needs.cash}K on the coin at dawn${ctx && ctx.cash != null ? have(`$${Math.round(ctx.cash)}K`) : ''}`);
+    if (needs.lobbyists != null) parts.push(`hire ${needs.lobbyists} lobbyists, career${ctx && ctx.lobbyists != null ? have(Math.round(ctx.lobbyists * 10) / 10) : ''}`);
+    if (needs.friends != null) parts.push(`have ${needs.friends} friend${needs.friends === 1 ? '' : 's'}${ctx && ctx.friends != null ? have(ctx.friends) : ''}`);
+    if (needs.streak != null) parts.push(`a ${needs.streak}-day streak${ctx && ctx.streak != null ? have(`${ctx.streak} day${ctx.streak === 1 ? '' : 's'}`) : ''}`);
     if (needs.building) { for (const slot of Object.keys(PLOTS)) { const b = PLOTS[slot].options[needs.building]; if (b) parts.push(`build ${b.name}`); } }
     if (needs.upgrade) { const u = ALL_UPGRADES[needs.upgrade]; if (u) parts.push(`buy the ${u.name.replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase())}`); }
-    if (needs.flag) return `Depends on how you handle “${FLAG_SOURCE[needs.flag] || 'an earlier card'}.”`;
+    if (needs.flag) return `Follows one of the two choices on “${FLAG_SOURCE[needs.flag] || 'an earlier card'}.” Play that card and see.`;
     if (needs.happiness_below != null) parts.push(`happiness drops under ${needs.happiness_below}`);
     if (needs.health_below != null) parts.push(`health drops under ${needs.health_below}`);
     if (needs.happiness_above != null) parts.push(`happiness is over ${needs.happiness_above}`);
@@ -456,7 +469,7 @@
     let first = general[hash(ctx.day) % general.length];
     const freshGeneral = general.filter((i) => !played.has(i.id));
     if (played.has(first.id) && freshGeneral.length) first = freshGeneral[hash(`${ctx.day}:${ctx.uid}:f`) % freshGeneral.length];
-    const unlocked = ISSUES.filter((i) => i.needs && needsMet(i.needs, t, ctx));
+    const unlocked = ISSUES.filter((i) => i.needs && (needsMet(i.needs, t, ctx) || adminOpen(t, i.id)));
     const recurring = (i) => ['happiness_below', 'health_below', 'happiness_above', 'health_above'].some((k) => i.needs[k] != null);
     const pool = unlocked.filter((i) => !played.has(i.id));
     // Emergent cards come back, but not day after day: a week between visits.
@@ -499,6 +512,7 @@
       t.happiness = clamp(Math.round(t.happiness + dh), 0, 100);
       t.health = clamp(Math.round(t.health + dl), 0, 100);
     }
+    t.days = (t.days || 0) + 1; // count today before dealing, so a "play 2 days" card can land on day two
     t.issues = unlocked ? pickIssues(t, ctx) : [];
     t.report = {
       first_day: firstDay,
@@ -535,6 +549,24 @@
     t.happiness = clamp(t.happiness + (fx.happy || 0), 0, 100);
     t.health = clamp(t.health + (fx.health || 0), 0, 100);
     t.perks = clamp(round2((t.perks || 0) + (fx.income || 0)), -20, 30);
+  }
+
+  // Admin (testing): force a card open, or every card ('*'); deal one onto
+  // today's agenda right now, locked or not.
+  function adminUnlock(t, ids) {
+    migrate(t);
+    const list = ids === '*' ? ['*'] : [].concat(ids).filter((id) => BY_ID.has(id));
+    for (const id of list) if (!t.admin_open.includes(id)) t.admin_open.push(id);
+    return { unlocked: list.length };
+  }
+  function deal(t, issueId) {
+    migrate(t);
+    if (!BY_ID.has(issueId)) return { error: 'No such card.' };
+    if (!t.issues) t.issues = [];
+    if (t.issues.some((i) => i.id === issueId)) return { error: "It's already on today's agenda." };
+    if (!t.admin_open.includes(issueId) && !t.admin_open.includes('*')) t.admin_open.push(issueId);
+    t.issues.push({ id: issueId, chosen: null });
+    return { dealt: issueId };
   }
 
   // Returns { error } or { cash, fx, side }.
@@ -681,11 +713,11 @@
       // The whole collection, for the deck view.
       deck: ISSUES.map((i) => {
         const slot = (t.issues || []).find((s) => s.id === i.id);
-        const status = slot ? (slot.chosen ? 'played' : 'today') : needsMet(i.needs, t, ctx) ? 'available' : 'locked';
-        return { id: i.id, title: i.title, general: !i.needs, status, needs: needsText(i.needs), seen: t.played.includes(i.id), consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag) };
+        const status = slot ? (slot.chosen ? 'played' : 'today') : (needsMet(i.needs, t, ctx) || adminOpen(t, i.id)) ? 'available' : 'locked';
+        return { id: i.id, title: i.title, general: !i.needs, status, needs: needsText(i.needs, t, ctx), seen: t.played.includes(i.id), consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), forced: adminOpen(t, i.id) };
       }),
     };
   }
 
-  return { fresh, migrate, tick, ensureIssues, decide, build, upgrade, view, hireCost, income, quitRate, isUnlocked, needsMet, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST };
+  return { fresh, migrate, tick, ensureIssues, decide, build, upgrade, view, hireCost, income, quitRate, isUnlocked, needsMet, adminUnlock, deal, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST };
 }));

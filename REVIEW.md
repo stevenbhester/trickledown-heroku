@@ -376,6 +376,47 @@ What I'd do next, in order of expected payoff:
   how often rides go to ×30. `npm test` keeps the invariants; the feel is
   what the data will say.
 
+## The deck's road ahead, and admin card tools
+
+The deck used to say "Everyone gets this one" on 21 of 77 cards, which read
+as a pile with no shape. Now:
+
+- **8 headline cards** stay universal (Rent day, The parking lot,
+  Team-building, The snack machine, The ball pit, Crunch week, The lobby
+  art, The coffee cups). The deck intro says how many you've played.
+- **13 cards open with days played** (An intern on day 2; The wifi
+  password and A holiday request on 3; A cat and A suggestion box on 4;
+  The lawn and The lunch hour on 5; Name badges 6; A dress code 7; The
+  elevator 8; A company newsletter 9; Fire drill 10; The holiday party 12).
+  The town
+  counts the days you've visited (`t.days`), not calendar days, so a
+  week off doesn't skip anything.
+- **Every locked card shows your progress** against its requirement:
+  "Unlock: play 5 days (you: 2)", "have $120K on the coin at dawn (you:
+  $70K)", "hire 10 lobbyists, career (you: 3.4)".
+- **A "Coming up" line** above the deck: how many cards open the next day
+  you play, how many more follow just for showing up, and that the rest
+  come from building, hiring, cash and friends.
+- **The grid shows two and a half rows** (measured, so the cut lands
+  mid-card at any width) with a fade and "Show all 77 cards". Within a
+  status, your town's own cards sort before the headlines.
+
+Admin (Account → Admin, `ADMIN_USERNAMES` only), each aimed at yourself or
+at a player you name:
+
+- **Deal it today** puts any card on today's agenda right now, after the
+  day's own cards, so you can test a specific card without waiting.
+- **Unlock it** / **Unlock every card** opens cards for future days
+  (stored as `town.admin_open`; the deck tags them "opened by admin").
+- **Reset to brand new** now also clears `vested_at` (the $40K gift comes
+  back), the player's own friend list, and device codes. On your own
+  account the browser forgets the training and the TrickleTown tour, so
+  the whole first day runs again: training, first-investment guide, the
+  vesting memo, the first-hire ceremony, the tour. Other players who added
+  you keep you on their list; that's their data.
+- Admin calls have their own rate limit (120 per 15 minutes) instead of
+  sharing the one that guards password changes.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

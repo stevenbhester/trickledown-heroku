@@ -138,6 +138,39 @@ assert.strictEqual(game.settle({ invested: 57.5, value: 1, deferred: 2.5 }).tax,
 assert.strictEqual(game.settle({ invested: 57.5, value: 80.5 }).deferred_tax, 0, 'matured: nothing deferred');
 ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
 
+// --- Day-gated cards and the admin overrides -------------------------------------
+{
+  const t = Town.fresh();
+  const ctx = { day: '2026-11-01', uid: 7, unlocked: true, cash: 70, lobbyists: 10, friends: 1, streak: 1 };
+  Town.tick(t, ctx);
+  let v = Town.view(t, ctx);
+  const headlines = v.deck.filter((d) => d.general).length;
+  assert(headlines >= 6 && headlines <= 10, `expected a small headline pool, got ${headlines}`);
+  const gated = v.deck.filter((d) => /play \d+ days/.test(d.needs));
+  assert(gated.length >= 10, 'expected day-gated cards');
+  assert(gated.every((d) => d.status === 'locked'), 'day-gated cards are locked on day one');
+  assert(/you've played 0 of/.test(v.deck.find((d) => d.general).needs), 'headline cards say how many you have seen');
+  assert(/\(you: 1\)/.test(gated[0].needs), 'day-gated cards show your progress');
+  for (let d = 2; d <= 12; d++) Town.tick(t, { ...ctx, day: `2026-11-${String(d).padStart(2, '0')}` });
+  assert.strictEqual(t.days, 12);
+  v = Town.view(t, { ...ctx, day: '2026-11-12' });
+  assert(gated.every((g) => v.deck.find((d) => d.id === g.id).status !== 'locked'), 'all day-gated cards open by day 12');
+  // Admin: unlock one, deal one, unlock all.
+  const t2 = Town.fresh();
+  Town.tick(t2, ctx);
+  assert.strictEqual(Town.adminUnlock(t2, ['holiday_party']).unlocked, 1);
+  assert.strictEqual(Town.view(t2, ctx).deck.find((d) => d.id === 'holiday_party').status, 'available');
+  assert.deepStrictEqual(Town.deal(t2, 'audit_return'), { dealt: 'audit_return' });
+  assert(t2.issues.some((i) => i.id === 'audit_return'), 'dealt card is on today\'s agenda');
+  assert(Town.deal(t2, 'audit_return').error, 'cannot deal the same card twice in a day');
+  assert(Town.deal(t2, 'nope').error, 'unknown card is an error');
+  assert(Town.adminUnlock(t2, '*').unlocked >= 1);
+  assert.strictEqual(Town.view(t2, ctx).deck.filter((d) => d.status === 'locked').length, 0, 'unlock all opens every card');
+  const dealt = Town.decide(t2, 'audit_return', 'dolores', 1000);
+  assert(!dealt.error, `dealt card can be played: ${dealt.error}`);
+  ok('13 cards unlock by days played; admin can unlock, deal, and open the whole deck');
+}
+
 // --- The front end has the same file ------------------------------------------
 const fe = path.join(__dirname, '../../trickledown-stevenhester-com/js/town.js');
 if (fs.existsSync(fe)) {

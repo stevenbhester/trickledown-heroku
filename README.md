@@ -137,7 +137,9 @@ whole view (`town`), including every card's unlock status for the deck grid.
 | POST | `/auth/device-code` | ✓ | a one-time `XXXX-XXXX` code, 15 minutes, for signing another device into this account (guests too) |
 | POST | `/auth/redeem-code` | | `{ code }` — the other device gets its own token |
 | POST | `/admin/grant` | admin | `{ cash?, lobbyists?, username?, charity_id? }` — testing: real rows, so boards and town see them |
-| POST | `/admin/reset` | admin | `{ username? }` — back to day one: no positions, no lobbyists, no town, $100 on the next `/me` |
+| POST | `/admin/reset` | admin | `{ username? }` — a brand-new account: no positions, lobbyists, town, friends on their list, streak or device codes; shares unvested; $100 on the next `/me`. Username and sign-ins stay |
+| POST | `/admin/unlock` | admin | `{ issue_id \| issue_ids \| all: true, username? }` — open cards early; they go in the pile for future days |
+| POST | `/admin/deal` | admin | `{ issue_id, username? }` — put a card on today's agenda now (town must be open and started today) |
 | GET | `/auth/options` | | whether Google sign-in is on, and the client id |
 
 Auth is a Bearer JWT (HS256) in the `Authorization` header. Tokens last 180

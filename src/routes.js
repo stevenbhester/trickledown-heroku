@@ -24,6 +24,9 @@ const RL = {
   // The live ticker polls every few seconds right after a buy.
   quote: limit({ name: 'quote', max: 240, windowMs: 60e3, message: 'Slow down. Try again in a minute.' }),
   social: limit({ name: 'social', max: 30, windowMs: 15 * 60e3, message: 'That is a lot of friends in a short time. Try again in 15 minutes.' }),
+  // Admin testing tools: their own bucket, so a burst of grants and resets
+  // doesn't use up the one that guards password changes. Only admins reach it.
+  admin: limit({ name: 'admin', max: 120, windowMs: 15 * 60e3, message: 'Slow down. Try again in a few minutes.' }),
 };
 
 // What the town rules need to know about the player.
@@ -410,7 +413,7 @@ function requireAdmin(req, res, next) {
 
 // Grant yourself (or a named player) cash and/or lobbyists. Lobbyists are a
 // real donation row so the boards and the town see them.
-router.post('/admin/grant', auth.requireUser, requireAdmin, RL.sensitive, wrap(async (req, res) => {
+router.post('/admin/grant', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
   const body = req.body || {};
   const cash = Math.max(0, Math.min(100000, Number(body.cash) || 0));
   const lobbyists = Math.max(0, Math.min(100000, Number(body.lobbyists) || 0));
@@ -435,20 +438,76 @@ router.post('/admin/grant', auth.requireUser, requireAdmin, RL.sensitive, wrap(a
   res.json({ ok: true, user: publicUser(user), town: townView(user) });
 }));
 
-// Start over: no positions, no lobbyists, no town, $100 at the next /me.
-router.post('/admin/reset', auth.requireUser, requireAdmin, RL.sensitive, wrap(async (req, res) => {
+// Start over as a brand-new account: no positions, no lobbyists, no town, no
+// friends on their list, shares unvested, streak zero, $100 at the next /me.
+// The username, password and sign-ins stay. Other players who added this one
+// as a friend keep them (that's their list, not this one's).
+router.post('/admin/reset', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
   const target = (req.body || {}).username ? await findPlayer(req.body.username) : req.user;
   if (!target) return res.status(404).json({ error: 'No player by that name.' });
   await withTx(async (tx) => {
     await tx.query('DELETE FROM donations WHERE user_id = $1', [target.id]);
     await tx.query('DELETE FROM positions WHERE user_id = $1', [target.id]);
+    await tx.query('DELETE FROM friends WHERE user_id = $1', [target.id]);
+    await tx.query('DELETE FROM link_codes WHERE user_id = $1', [target.id]);
     await tx.query(
-      `UPDATE users SET cash = 0, total_donated = 0, realized_pnl = 0, streak = 0, last_allowance_day = NULL, town = NULL, charity_id = NULL WHERE id = $1`,
+      `UPDATE users SET cash = 0, total_donated = 0, realized_pnl = 0, streak = 0, last_allowance_day = NULL,
+              town = NULL, charity_id = NULL, vested_at = NULL WHERE id = $1`,
       [target.id],
     );
   });
   console.log(`[admin] ${req.user.username} reset ${target.username}`);
-  res.json({ ok: true });
+  res.json({ ok: true, self: target.id === req.user.id });
+}));
+
+// Cards: open some (or all) of the deck early, or put one on today's agenda.
+// Both act on today's town, so the player's game has to have been opened
+// today (the /me that ticks the town). Self by default, or { username }.
+async function adminTown(req, res, act) {
+  const body = req.body || {};
+  const target = body.username ? await findPlayer(body.username) : req.user;
+  if (!target) return res.status(404).json({ error: 'No player by that name.' });
+  const today = game.dayKey();
+  const result = await withTx(async (tx) => {
+    const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [target.id]);
+    const town = u.town || Town.fresh();
+    const r = act(town, u, today);
+    if (r.error) return r;
+    const { rows: [u2] } = await tx.query('UPDATE users SET town = $1 WHERE id = $2 RETURNING *', [town, u.id]);
+    return { user: u2, r };
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  result.user.friend_count = await friendCount(result.user.id);
+  return { target, user: result.user, r: result.r };
+}
+
+const cardIds = (raw) => [].concat(raw || []).map(String).filter((id) => /^[a-z_0-9]{1,40}$/.test(id)).slice(0, 200);
+
+router.post('/admin/unlock', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const body = req.body || {};
+  const ids = body.all === true ? '*' : cardIds(body.issue_ids || body.issue_id);
+  if (ids !== '*' && !ids.length) return res.status(400).json({ error: 'Pick a card, or send all: true.' });
+  const out = await adminTown(req, res, (town) => {
+    const r = Town.adminUnlock(town, ids);
+    return r.unlocked ? r : { error: 'No such card.' };
+  });
+  if (!out) return;
+  console.log(`[admin] ${req.user.username} unlocked ${ids === '*' ? 'every card' : ids.join(', ')} for ${out.target.username}`);
+  res.json({ ok: true, unlocked: out.r.unlocked, user: publicUser(out.user), town: townView(out.user) });
+}));
+
+router.post('/admin/deal', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const [id] = cardIds((req.body || {}).issue_id);
+  if (!id) return res.status(400).json({ error: 'Pick a card.' });
+  const out = await adminTown(req, res, (town, u, today) => {
+    if (!Town.isUnlocked(u.total_donated)) return { error: "TrickleTown isn't open for this player yet: they need a lobbyist first (grant one)." };
+    if (town.day !== today) return { error: "This player's town hasn't started today yet. Open the game as them first." };
+    Town.ensureIssues(town, townCtx(u, { day: today })); // today's own cards first, if the town only just opened
+    return Town.deal(town, id);
+  });
+  if (!out) return;
+  console.log(`[admin] ${req.user.username} dealt ${id} to ${out.target.username}`);
+  res.json({ ok: true, dealt: id, user: publicUser(out.user), town: townView(out.user) });
 }));
 
 router.post('/auth/logout-all', auth.requireUser, wrap(async (req, res) => {
