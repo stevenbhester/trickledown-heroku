@@ -8,6 +8,10 @@ const auth = require('./auth');
 const maturer = require('./maturer');
 const Town = require('./town');
 
+// What the town rules need to know about the player.
+const townCtx = (u, extra = {}) => ({ uid: u.id, cash: u.cash, lobbyists: u.total_donated, unlocked: Town.isUnlocked(u.total_donated), ...extra });
+const townView = (u) => ({ ...Town.view(u.town || Town.fresh(), townCtx(u)), unlocked: Town.isUnlocked(u.total_donated) });
+
 const router = express.Router();
 
 // Wrap async handlers so thrown errors reach the error middleware.
@@ -208,8 +212,9 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     // A new day in the village: buildings push the meters, today's issues are
     // dealt, and the town's income joins the allowance (it can subtract).
     const town = user.town || Town.fresh();
-    const { report } = Town.tick(town, { day: day.key, uid: user.id });
     const base = game.allowanceFor(streak);
+    // Cash at dawn, for cards that need "$X on the coin": base stipend plus whatever the town pays.
+    const { report } = Town.tick(town, townCtx(user, { day: day.key, cash: user.cash + base + Town.income(town) }));
     const amount = game.round2(Math.max(10, base + report.income));
     const { rows } = await query(
       `UPDATE users
@@ -229,6 +234,11 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     } else { ({ rows: [user] } = await query('SELECT * FROM users WHERE id = $1', [user.id])); }
   } else {
     await query('UPDATE users SET last_seen_at = now() WHERE id = $1', [user.id]);
+  }
+
+  // Unlocked mid-day (first full lobbyist just hired)? Deal today's issues now.
+  if (user.town && Town.ensureIssues(user.town, townCtx(user, { day: day.key }))) {
+    await query('UPDATE users SET town = $1 WHERE id = $2', [user.town, user.id]);
   }
 
   const { rows: open } = await query(
@@ -289,7 +299,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     rules: { tax_rate: cfg.taxRate, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
     positions,
     history,
-    town: Town.view(user.town || Town.fresh()),
+    town: townView(user),
     donations_by_charity: byCharity,
     crowd: { picks: crowd, ...crowdTotal },
     today_donated: todayGiven.amount,
@@ -475,16 +485,17 @@ router.post('/town/decide', auth.requireUser, wrap(async (req, res) => {
   const { issue_id: issueId, side } = req.body || {};
   const result = await withTx(async (tx) => {
     const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    if (!Town.isUnlocked(u.total_donated)) return { error: 'TrickleTown opens when you hire your first full lobbyist.' };
     const town = u.town || Town.fresh();
     const r = Town.decide(town, String(issueId || ''), side, u.cash);
     if (r.error) return r;
     const { rows: [u2] } = await tx.query(
       'UPDATE users SET cash = GREATEST(0, cash + $1), town = $2 WHERE id = $3 RETURNING *', [r.cash, town, u.id],
     );
-    return { user: u2, cash: r.cash };
+    return { user: u2, cash: r.cash, fx: r.fx };
   });
   if (result.error) return res.status(400).json({ error: result.error });
-  res.json({ ok: true, cash_change: result.cash, user: publicUser(result.user), town: Town.view(result.user.town) });
+  res.json({ ok: true, cash_change: result.cash, fx: result.fx, user: publicUser(result.user), town: townView(result.user) });
 }));
 
 // Put up (or replace) a building on a plot.
@@ -492,6 +503,7 @@ router.post('/town/build', auth.requireUser, wrap(async (req, res) => {
   const { slot, key } = req.body || {};
   const result = await withTx(async (tx) => {
     const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    if (!Town.isUnlocked(u.total_donated)) return { error: 'TrickleTown opens when you hire your first full lobbyist.' };
     const town = u.town || Town.fresh();
     const r = Town.build(town, String(slot || ''), String(key || ''), u.cash);
     if (r.error) return r;
@@ -501,7 +513,25 @@ router.post('/town/build', auth.requireUser, wrap(async (req, res) => {
     return { user: u2 };
   });
   if (result.error) return res.status(400).json({ error: result.error });
-  res.json({ ok: true, user: publicUser(result.user), town: Town.view(result.user.town) });
+  res.json({ ok: true, user: publicUser(result.user), town: townView(result.user) });
+}));
+
+// Buy an upgrade for the building on a plot.
+router.post('/town/upgrade', auth.requireUser, wrap(async (req, res) => {
+  const { slot, key } = req.body || {};
+  const result = await withTx(async (tx) => {
+    const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    if (!Town.isUnlocked(u.total_donated)) return { error: 'TrickleTown opens when you hire your first full lobbyist.' };
+    const town = u.town || Town.fresh();
+    const r = Town.upgrade(town, String(slot || ''), String(key || ''), u.cash);
+    if (r.error) return r;
+    const { rows: [u2] } = await tx.query(
+      'UPDATE users SET cash = cash + $1, town = $2 WHERE id = $3 RETURNING *', [r.cash, town, u.id],
+    );
+    return { user: u2 };
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json({ ok: true, user: publicUser(result.user), town: townView(result.user) });
 }));
 
 // --- Public boards ---------------------------------------------------------------
