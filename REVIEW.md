@@ -249,6 +249,32 @@ sleeps. `town.js` being pure and byte-identical in both repos, driven by one
 the mottos) is the best part of the product; don't let a balance pass flatten
 it." It didn't.
 
+## Tester feedback, round two
+
+- **"The browser bugged and I'm back in the tutorial."** After the first
+  taxed sale the coin flipped by itself and the TrickleTown tour opened,
+  which looked exactly like the orientation. Now the first hire is a
+  ceremony: the tax walks across the recruiter's desk and comes out as
+  lobbyists, the sheet says who was hired and for whom and that they've
+  moved in on the other side of the coin, and a single button, "Flip the
+  coin to meet them," does the flip, lands the bills in the payroll, and
+  only then opens the tour. The tour itself now reads as a different
+  document (green band, "TrickleTown" brand, "part two"). "Later" leaves a
+  primary "Meet your lobbyists" button on the coin; the first flip to tails
+  runs the tour.
+- **"I thought we were moving off demo mode."** The demo now only runs at
+  `?demo`; a copy pointed at the placeholder backend shows a setup notice.
+  Real mode was verified end to end in a browser against the backend: a
+  fresh guest starts with $100, no positions, no lobbyists, buys at the live
+  price, collects, gets the ceremony, and the account can be carried to a
+  second browser with a device code or claimed with a password.
+- **Admin.** `ADMIN_USERNAMES` grows an Admin section in Account: grant
+  cash and lobbyists (real rows), reset to day one.
+- **Cross-device without a password.** Account → "Use on another device"
+  gives a 15-minute single-use code; Sign in → "Use a code" on the other
+  device. Guests included, so nobody has to invent a password to try the
+  game on their phone.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

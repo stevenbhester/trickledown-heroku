@@ -121,6 +121,10 @@ whole view (`town`), including every card's unlock status for the deck grid.
 | POST | `/auth/password` | ✓ | `{ current?, password }` — set/change password; signs out other devices |
 | POST | `/auth/username` | ✓ | `{ username }` |
 | POST | `/auth/logout-all` | ✓ | invalidate every token for this account |
+| POST | `/auth/device-code` | ✓ | a one-time `XXXX-XXXX` code, 15 minutes, for signing another device into this account (guests too) |
+| POST | `/auth/redeem-code` | | `{ code }` — the other device gets its own token |
+| POST | `/admin/grant` | admin | `{ cash?, lobbyists?, username?, charity_id? }` — testing: real rows, so boards and town see them |
+| POST | `/admin/reset` | admin | `{ username? }` — back to day one: no positions, no lobbyists, no town, $100 on the next `/me` |
 | GET | `/auth/options` | | whether Google sign-in is on, and the client id |
 
 Auth is a Bearer JWT (HS256) in the `Authorization` header. Tokens last 180
@@ -138,6 +142,11 @@ days and carry the account's `token_version`; a password change or
   10 new accounts / hour, 10 guest accounts / hour, 10 sensitive changes / 15
   min, 30 friend-adds / 15 min, 60 trades / min, 120 reads (`/quote`,
   `/players`) / min. One dyno; move the store to Redis if you scale out.
+- Device codes are 8 characters from an unambiguous alphabet (40 bits),
+  hashed at rest, single-use, 15 minutes, one live code per account, and
+  redeeming shares the login rate limit (20 / 15 min per IP).
+- Admin is a username allow-list (`ADMIN_USERNAMES`), checked on the
+  signed-in account; the endpoints log who granted what to whom.
 - Tokens slide: `/me` returns a fresh `token` once the current one is past
   half its 180 days, so a guest who keeps playing is never signed out of an
   account they can't sign back into. `token_version` still revokes.

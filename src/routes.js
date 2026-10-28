@@ -52,6 +52,7 @@ function publicUser(u) {
     has_password: !!u.password_hash,
     google: !!u.google_sub,
     email: u.email || null,
+    is_admin: auth.isAdmin(u),
   };
 }
 
@@ -353,6 +354,82 @@ router.post('/auth/username', auth.requireUser, RL.sensitive, wrap(async (req, r
 }));
 
 // Invalidate every token for this account, including this one.
+// "Use on another device": the signed-in device asks for a code, the other
+// device redeems it and gets its own token for the same account. Works for
+// guests too, which is the point: it's the cross-device path that needs no
+// password. 15 minutes, single use, hashed at rest.
+router.post('/auth/device-code', auth.requireUser, RL.sensitive, wrap(async (req, res) => {
+  const code = auth.deviceCode();
+  const expiresAt = new Date(Date.now() + auth.CODE_TTL_MS);
+  await query('DELETE FROM link_codes WHERE user_id = $1 OR expires_at < now()', [req.user.id]);
+  await query('INSERT INTO link_codes (code_hash, user_id, expires_at) VALUES ($1, $2, $3)', [auth.hashCode(code), req.user.id, expiresAt]);
+  res.json({ code, expires_at: expiresAt.toISOString(), ttl_minutes: Math.round(auth.CODE_TTL_MS / 60e3) });
+}));
+
+router.post('/auth/redeem-code', RL.login, wrap(async (req, res) => {
+  const raw = (req.body || {}).code;
+  if (!raw || auth.normalizeCode(raw).length !== 8) return res.status(400).json({ error: 'Codes look like ABCD-EFGH.' });
+  const { rows: [row] } = await query(
+    `UPDATE link_codes SET used_at = now()
+      WHERE code_hash = $1 AND used_at IS NULL AND expires_at > now() RETURNING user_id`,
+    [auth.hashCode(raw)],
+  );
+  if (!row) return res.status(400).json({ error: "That code isn't valid. They last 15 minutes and work once; get a fresh one from the other device." });
+  const { rows: [user] } = await query('UPDATE users SET last_seen_at = now() WHERE id = $1 RETURNING *', [row.user_id]);
+  if (!user) return res.status(400).json({ error: 'That account no longer exists.' });
+  res.json({ token: auth.sign(user), user: publicUser(user) });
+}));
+
+// --- Admin: testing conveniences, only for ADMIN_USERNAMES ---------------------
+
+function requireAdmin(req, res, next) {
+  if (!auth.isAdmin(req.user)) return res.status(403).json({ error: 'Not for you.' });
+  next();
+}
+
+// Grant yourself (or a named player) cash and/or lobbyists. Lobbyists are a
+// real donation row so the boards and the town see them.
+router.post('/admin/grant', auth.requireUser, requireAdmin, RL.sensitive, wrap(async (req, res) => {
+  const body = req.body || {};
+  const cash = Math.max(0, Math.min(100000, Number(body.cash) || 0));
+  const lobbyists = Math.max(0, Math.min(100000, Number(body.lobbyists) || 0));
+  const target = body.username ? await findPlayer(body.username) : req.user;
+  if (!target) return res.status(404).json({ error: 'No player by that name.' });
+  if (!cash && !lobbyists) return res.status(400).json({ error: 'Grant something: cash, lobbyists, or both.' });
+  const day = dayInfo();
+  const user = await withTx(async (tx) => {
+    let charity = null;
+    if (lobbyists) {
+      charity = await pickCharity(target, Number(body.charity_id));
+      if (!charity) throw new Error('No charities are set up yet.');
+      await tx.query('INSERT INTO donations (user_id, charity_id, amount, quarter) VALUES ($1, $2, $3, $4)', [target.id, charity.id, lobbyists, day.quarter]);
+    }
+    const { rows: [u] } = await tx.query(
+      'UPDATE users SET cash = cash + $1, total_donated = total_donated + $2, charity_id = COALESCE($3, charity_id) WHERE id = $4 RETURNING *',
+      [cash, lobbyists, charity ? charity.id : null, target.id],
+    );
+    return u;
+  });
+  console.log(`[admin] ${req.user.username} granted ${target.username}: $${cash}, ${lobbyists} lobbyists`);
+  res.json({ ok: true, user: publicUser(user), town: townView(user) });
+}));
+
+// Start over: no positions, no lobbyists, no town, $100 at the next /me.
+router.post('/admin/reset', auth.requireUser, requireAdmin, RL.sensitive, wrap(async (req, res) => {
+  const target = (req.body || {}).username ? await findPlayer(req.body.username) : req.user;
+  if (!target) return res.status(404).json({ error: 'No player by that name.' });
+  await withTx(async (tx) => {
+    await tx.query('DELETE FROM donations WHERE user_id = $1', [target.id]);
+    await tx.query('DELETE FROM positions WHERE user_id = $1', [target.id]);
+    await tx.query(
+      `UPDATE users SET cash = 0, total_donated = 0, realized_pnl = 0, streak = 0, last_allowance_day = NULL, town = NULL, charity_id = NULL WHERE id = $1`,
+      [target.id],
+    );
+  });
+  console.log(`[admin] ${req.user.username} reset ${target.username}`);
+  res.json({ ok: true });
+}));
+
 router.post('/auth/logout-all', auth.requireUser, wrap(async (req, res) => {
   await query('UPDATE users SET token_version = token_version + 1 WHERE id = $1', [req.user.id]);
   res.json({ ok: true });

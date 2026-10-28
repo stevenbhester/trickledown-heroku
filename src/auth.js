@@ -56,6 +56,20 @@ function randomTag(n = 6) {
 }
 const guestName = () => `guest_${randomTag()}`;
 
+// Device link codes: 8 characters from an unambiguous alphabet (40 bits),
+// shown as XXXX-XXXX, hashed at rest, 15 minutes, single use.
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const CODE_TTL_MS = 15 * 60e3;
+function deviceCode() {
+  const bytes = crypto.randomBytes(8);
+  let out = '';
+  for (let i = 0; i < 8; i++) out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  return `${out.slice(0, 4)}-${out.slice(4)}`;
+}
+const normalizeCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/O/g, '0').replace(/I/g, '1');
+const hashCode = (c) => crypto.createHash('sha256').update(normalizeCode(c)).digest('hex');
+const isAdmin = (user) => !!user && cfg.adminUsernames.includes(String(user.username || '').toLowerCase());
+
 // A username for a Google account: the name or email's local part, cleaned,
 // with a short tag so it's unlikely to collide. The player can change it.
 function suggestUsername(name, email) {
@@ -97,5 +111,6 @@ function securityHeaders(req, res, next) {
 
 module.exports = {
   sign, hashPassword, checkPassword, validUsername, passwordProblem, guestName, suggestUsername, requireUser, securityHeaders,
-  PASSWORD_MIN, TOKEN_TTL_MS,
+  deviceCode, hashCode, normalizeCode, isAdmin,
+  PASSWORD_MIN, TOKEN_TTL_MS, CODE_TTL_MS,
 };

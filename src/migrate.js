@@ -123,6 +123,15 @@ ALTER TABLE positions ADD COLUMN IF NOT EXISTS deferred_tax NUMERIC(14,2) NOT NU
 -- logged price near the mark, so the receipt can say so.
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS matured_late BOOLEAN NOT NULL DEFAULT false;
 
+-- "Use on another device": a short-lived, single-use code that signs the
+-- other device into the same account. Stored hashed.
+CREATE TABLE IF NOT EXISTS link_codes (
+  code_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ
+);
+
 -- Every quote the game fetches, one row per symbol per minute, kept a week.
 -- If a position has to be frozen late, the price nearest its 24-hour mark
 -- comes from here instead of from whenever someone next showed up.

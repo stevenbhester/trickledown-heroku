@@ -12,6 +12,9 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
   bcryptRounds: num(process.env.BCRYPT_ROUNDS, 12),
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  // Usernames that get the Admin section (grant cash/lobbyists, reset) for
+  // testing. Comma-separated, case-insensitive. Empty = nobody.
+  adminUsernames: (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   corsOrigins: (process.env.CORS_ORIGIN || '*').split(',').map((s) => s.trim()).filter(Boolean),
 
   gameTz: process.env.GAME_TZ || 'America/Chicago',

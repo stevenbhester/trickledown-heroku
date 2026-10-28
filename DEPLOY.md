@@ -2,6 +2,20 @@
 
 Two repos, two hosts. About 20 minutes the first time.
 
+## 0. What "live" means
+
+Once the backend is up and `config.js` points at it, every visitor starts
+with $100, no positions and no lobbyists, buys at real prices, and gets a
+guest account that lives in that browser. "Keep this account" (username +
+password, or Google) or Account → "Use on another device" (a 15-minute code)
+carries it across devices. The demo (invented prices, seeded positions) now
+only runs at `?demo`; a copy whose `config.js` still has the placeholder URL
+shows a "not connected yet" notice instead of quietly playing the fake game.
+
+For testing, put your username(s) in `ADMIN_USERNAMES`: the Account sheet
+grows an Admin section that grants cash and lobbyists (real rows, so the
+boards and the town see them) and resets the account to day one.
+
 ## 1. Backend on Heroku
 
 ```
@@ -13,6 +27,7 @@ heroku config:set JWT_SECRET="$(openssl rand -hex 32)"
 heroku config:set CORS_ORIGIN="https://stevenbhester.github.io,https://trickledown.stevenhester.com"
 heroku config:set FINNHUB_API_KEY="your_finnhub_key"
 heroku config:set GAME_TZ=America/Chicago LAUNCH_DATE=$(date +%F) DEMO_MODE=true
+heroku config:set ADMIN_USERNAMES=steven          # your username(s), comma-separated; grant/reset from Account
 git push heroku main
 heroku logs --tail                        # should say: Trickle Down API on :PORT (prices: live, …)
 ```
