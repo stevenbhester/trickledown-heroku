@@ -35,7 +35,7 @@
       label: 'Housing',
       options: {
         tenement: {
-          name: 'Tenement Row', tier: 'bad', income: 15, happy: -3, health: -4,
+          name: 'Tenement Row', tier: 'bad', income: 18, happy: -3, health: -4, cost: 20,
           pitch: { who: 'preston', line: 'Forty units where there used to be eight. Walls are a luxury, and we are not in the luxury business.' },
           sign: 'Now leasing. Always leasing.',
           upgrades: {
@@ -44,7 +44,7 @@
           },
         },
         pinnacle: {
-          name: 'The Pinnacle', tier: 'compromise', income: 8, happy: 1, health: -2,
+          name: 'The Pinnacle', tier: 'compromise', income: 8, happy: 1, health: -2, cost: 40,
           pitch: { who: 'preston', line: '"Luxury living." Granite-look countertops. The rooftop pool is coming soon, legally speaking.' },
           sign: 'Elevated living. Elevator pending.',
           upgrades: {
@@ -53,7 +53,7 @@
           },
         },
         coop: {
-          name: 'Maple Co-op', tier: 'good', income: -3, happy: 3, health: 3,
+          name: 'Maple Co-op', tier: 'good', income: -3, happy: 3, health: 3, cost: 60,
           pitch: { who: 'dolores', line: 'They own it together and fix the boiler themselves. Costs you upkeep, pays you nothing. They will never forget it.' },
           sign: 'Meeting Thursday. Still.',
           upgrades: {
@@ -67,7 +67,7 @@
       label: 'Town square',
       options: {
         casino: {
-          name: 'Lucky Lobby Casino', tier: 'bad', income: 18, happy: -2, health: -6,
+          name: 'Lucky Lobby Casino', tier: 'bad', income: 18, happy: -2, health: -6, cost: 30,
           pitch: { who: 'preston', line: 'No clocks, no windows, free drinks. They have a wonderful time and we keep the change. All of the change.' },
           sign: 'The house always wins. You are the house.',
           upgrades: {
@@ -76,7 +76,7 @@
           },
         },
         store: {
-          name: 'Company Store', tier: 'compromise', income: 8, happy: -1, health: 0,
+          name: 'Company Store', tier: 'compromise', income: 8, happy: -1, health: 0, cost: 40,
           pitch: { who: 'preston', line: 'It is the only store. Prices are fair, by which I mean they are prices.' },
           sign: 'Everything you need. Nothing you can afford. Cards cost 20% less here.',
           card_discount: 0.2,
@@ -86,7 +86,7 @@
           },
         },
         clinic: {
-          name: 'Free Clinic', tier: 'good', income: -5, happy: 1, health: 4,
+          name: 'Free Clinic', tier: 'good', income: -5, happy: 1, health: 4, cost: 60,
           pitch: { who: 'dolores', line: 'A doctor, two nurses, no billing department. Healthy lobbyists stay on the payroll.' },
           sign: 'Walk-ins welcome. Limp-ins too.',
           upgrades: {
@@ -102,248 +102,248 @@
   // (one-time nudges). needs: what unlocks the card. No needs = everyone gets
   // it, one per day. happiness_below / health_below are "it happens when".
   const ISSUES = [
-    { id: 'rent_day', title: 'Rent day', setup: 'The lease renewals are on your desk.',
-      preston: { label: 'Raise it 9%', line: 'The market will bear it. The market is very strong. I have seen it lift a car.', fx: { income: 4, happy: -8 } },
+    { id: 'rent_day', title: 'Rent day', setup: 'The lease renewals are on your desk.', ask: 'What happens to the rent?',
+      preston: { label: 'Raise rent 9%', line: 'The market will bear it. The market is very strong. I have seen it lift a car.', fx: { income: 4, happy: -8 } },
       dolores: { label: 'Freeze rent', line: "Hold it flat a year. They'll stop eating soup for dinner. Some of them.", fx: { income: -2, happy: 6 } } },
-    { id: 'parking', title: 'The parking lot', setup: 'Someone noticed the parking lot is free.',
-      preston: { label: 'Paid parking', line: 'Every empty space is a space that could be invoicing.', fx: { income: 3, happy: -5 } },
-      dolores: { label: 'Bike racks', line: "Bike racks. They're cheap and the lobbyists get some sun.", fx: { cash: -15, happy: 3, health: 3 } } },
-    { id: 'retreat', title: 'Team-building', setup: 'HR says morale is "a vibe."',
-      preston: { label: 'Mandatory retreat', line: 'Unpaid weekend retreat. At the casino. Attendance is voluntary and tracked.', fx: { cash: 12, happy: -6, health: -2 } },
-      dolores: { label: 'A real day off', line: "Hear me out: a day where nobody does anything. It's called a day off.", fx: { cash: -10, happy: 8, health: 3 } } },
-    { id: 'snacks', title: 'The snack machine', setup: 'The vending machine in the lobby is out of everything.',
-      preston: { label: 'Surge pricing', line: 'Prices that respond to hunger. The hungrier they are, the more they value a pretzel.', fx: { income: 2, happy: -3, health: -2 } },
-      dolores: { label: 'Fruit bowl', line: 'A bowl. Of fruit. Free. I will carry it in myself.', fx: { cash: -8, health: 4 } } },
-    { id: 'ball_pit', title: 'The ball pit', setup: 'The lobbyists have submitted a formal request.',
+    { id: 'parking', title: 'The parking lot', setup: 'Someone noticed the parking lot is free.', ask: 'What do you do with the lot?',
+      preston: { label: 'Charge for parking', line: 'Every empty space is a space that could be invoicing.', fx: { income: 3, happy: -5 } },
+      dolores: { label: 'Bike racks instead', line: "Bike racks. They're cheap and the lobbyists get some sun.", fx: { cash: -15, happy: 3, health: 3 } } },
+    { id: 'retreat', title: 'Team-building', setup: 'HR says morale is "a vibe."', ask: 'How do you fix morale?',
+      preston: { label: 'Unpaid mandatory retreat', line: 'Unpaid weekend retreat. At the casino. Attendance is voluntary and tracked.', fx: { cash: 12, happy: -6, health: -2 } },
+      dolores: { label: 'Give them a real day off', line: "Hear me out: a day where nobody does anything. It's called a day off.", fx: { cash: -10, happy: 8, health: 3 } } },
+    { id: 'snacks', title: 'The snack machine', setup: 'The vending machine in the lobby is out of everything.', ask: 'How does the machine get restocked?',
+      preston: { label: 'Surge pricing on snacks', line: 'Prices that respond to hunger. The hungrier they are, the more they value a pretzel.', fx: { income: 2, happy: -3, health: -2 } },
+      dolores: { label: 'Put out a free fruit bowl', line: 'A bowl. Of fruit. Free. I will carry it in myself.', fx: { cash: -8, health: 4 } } },
+    { id: 'ball_pit', title: 'The ball pit', setup: 'The lobbyists have submitted a formal request.', ask: 'Do they get the ball pit?',
       preston: { label: 'Sell ball-pit NFTs', line: 'Digital ball pit. Unique balls. We mint, they pay, nobody gets wet.', fx: { cash: 12, happy: -3 } },
       dolores: { label: 'Build the ball pit', line: "I'm not saying it's a good idea. I'm saying they voted, and it was unanimous.", fx: { cash: -30, happy: 12 } } },
-    { id: 'overtime', title: 'Crunch week', setup: 'Lobbyfest prep is behind schedule.',
+    { id: 'overtime', title: 'Crunch week', setup: 'Lobbyfest prep is behind schedule.', ask: 'Who pays for the extra hours?',
       preston: { label: 'Unpaid overtime', line: "We don't call it unpaid. We call it equity in the mission.", fx: { cash: 18, health: -8, happy: -4 } },
       dolores: { label: 'Pay the overtime', line: 'Time and a half. It is the law in most places and a good idea in all of them.', fx: { cash: -12, happy: 4 } } },
 
-    { id: 'flu', needs: { health_below: 55 }, title: 'Flu in the building', setup: 'Half the third floor is coughing.',
+    { id: 'flu', needs: { health_below: 55 }, title: 'Flu in the building', setup: 'Half the third floor is coughing.', ask: 'How do you handle the sick days?',
       preston: { label: '"Wellness accountability"', line: 'Sick days are a cost center. Also, flu-themed merch.', fx: { cash: 6, health: -7, happy: -4 } },
       dolores: { label: 'Weekend clinic hours', line: "Pay a nurse for Saturdays. They come back faster when they're not coughing on each other.", fx: { cash: -20, health: 12 } } },
-    { id: 'petition', needs: { happiness_below: 45 }, title: 'A petition', setup: '212 signatures. Some of them are the same lobbyist.',
-      preston: { label: 'Morale is a mindset', line: 'Frame it, hang it in the lobby, and thank them for their feedback.', fx: { happy: -8 } },
+    { id: 'petition', needs: { happiness_below: 45 }, title: 'A petition', setup: '212 signatures. Some of them are the same lobbyist.', ask: 'What do you do with the petition?',
+      preston: { label: 'Ignore it; morale is a mindset', line: 'Frame it, hang it in the lobby, and thank them for their feedback.', fx: { happy: -8 } },
       dolores: { label: 'Meet with them', line: "Bring donuts. Listen for twenty minutes. Don't check your phone.", fx: { cash: -12, happy: 10 } } },
-    { id: 'strike', needs: { happiness_below: 25 }, title: 'Strike vote', setup: "The village has stopped lobbying. They're outside holding signs. The signs are well-lobbied.",
+    { id: 'strike', needs: { happiness_below: 25 }, title: 'Strike vote', setup: "The village has stopped lobbying. They're outside holding signs. The signs are well-lobbied.", ask: 'How do you end the strike?',
       preston: { label: 'Hire replacements', line: 'There are always more lobbyists. That is the beauty of lobbyists.', fx: { cash: -25, happy: -10 } },
       dolores: { label: 'Give them the raise', line: "It's the cheapest thing on this list in about a month.", fx: { income: -4, happy: 18 } } },
-    { id: 'mold', needs: { building: 'tenement' }, title: 'The mold report', setup: 'The inspector used the word "sentient."',
+    { id: 'mold', needs: { building: 'tenement' }, title: 'The mold report', setup: 'The inspector used the word "sentient."', ask: 'What do you do about the mold?',
       preston: { label: 'Paint over it', line: 'A fresh coat of Eggshell Optimism. Mold is just texture.', fx: { cash: -3, health: -10 } },
       dolores: { label: 'Fix the walls', line: "It's the walls, not the paint. It's always the walls.", fx: { cash: -30, health: 12, happy: 3 } } },
-    { id: 'amenity_fee', needs: { building: 'pinnacle' }, title: 'The amenities', setup: 'Residents of The Pinnacle are asking where the pool is.',
+    { id: 'amenity_fee', needs: { building: 'pinnacle' }, title: 'The amenities', setup: 'Residents of The Pinnacle are asking where the pool is.', ask: 'What do you tell them about the pool?',
       preston: { label: 'Add an amenity fee', line: 'The fee funds the amenities. The amenities are the fee.', fx: { income: 5, happy: -7 } },
       dolores: { label: 'Build the pool', line: 'You advertised a pool. Build a pool. Even a small pool. Even a big tub.', fx: { cash: -30, happy: 10, health: 2 } } },
-    { id: 'coop_meeting', needs: { building: 'coop' }, title: 'The co-op meeting', setup: 'Hour four. They are discussing the meeting schedule.',
-      preston: { label: 'Let me chair it', line: "I'll streamline. First item: I'm the board now.", fx: { income: 4, happy: -8 } },
+    { id: 'coop_meeting', needs: { building: 'coop' }, title: 'The co-op meeting', setup: 'Hour four. They are discussing the meeting schedule.', ask: 'How do you handle the meeting?',
+      preston: { label: 'Let Preston chair it', line: "I'll streamline. First item: I'm the board now.", fx: { income: 4, happy: -8 } },
       dolores: { label: 'Let it run long', line: 'This is what democracy looks like. It looks long.', fx: { happy: 4 } } },
-    { id: 'high_roller', needs: { building: 'casino' }, title: 'A high roller', setup: 'One lobbyist has been at the slots since Tuesday.',
+    { id: 'high_roller', needs: { building: 'casino' }, title: 'A high roller', setup: 'One lobbyist has been at the slots since Tuesday.', ask: 'What do you do about him?',
       preston: { label: 'Comp him a suite', line: "Keep him comfortable. He's a valued guest and also our quarterly numbers.", fx: { cash: 25, health: -6, happy: -2 } },
       dolores: { label: 'Cut him off', line: "Cut him off and call his sister. She's been calling us.", fx: { cash: -5, happy: 4, health: 3 } } },
-    { id: 'scrip', needs: { building: 'store' }, title: 'Payday', setup: 'The Company Store would like to handle payroll.',
+    { id: 'scrip', needs: { building: 'store' }, title: 'Payday', setup: 'The Company Store would like to handle payroll.', ask: 'How do you pay them this month?',
       preston: { label: 'Pay them in scrip', line: 'Store credit. Spendable at one (1) store. Ours.', fx: { income: 6, happy: -9 } },
       dolores: { label: 'Price-match outside', line: 'Match the prices at the store across the river. If they can, you can.', fx: { income: -3, happy: 6 } } },
-    { id: 'clinic_bill', needs: { building: 'clinic' }, title: 'The clinic budget', setup: 'The Free Clinic has a line out the door. Preston has a spreadsheet.',
+    { id: 'clinic_bill', needs: { building: 'clinic' }, title: 'The clinic budget', setup: 'The Free Clinic has a line out the door. Preston has a spreadsheet.', ask: 'How do you shorten the line?',
       preston: { label: 'Add a billing department', line: 'Free is a price point. We could explore other price points.', fx: { income: 6, health: -6, happy: -4 } },
       dolores: { label: 'Hire another nurse', line: "One more nurse and the line's gone. A line costs you more than a nurse.", fx: { cash: -20, health: 8 } } },
 
-    { id: 'reporter', needs: { lobbyists: 5 }, title: 'A reporter', setup: 'She has questions about the village. She has a notebook. She has already seen the parking lot.',
+    { id: 'reporter', needs: { lobbyists: 5 }, title: 'A reporter', setup: 'She has questions about the village. She has a notebook. She has already seen the parking lot.', ask: 'What do you tell the reporter?',
       preston: { label: 'Lobby the reporter', line: 'We hire a lobbyist to lobby the reporter. Ironic, but effective.', fx: { cash: -15, happy: -2 } },
       dolores: { label: 'Tell her the truth', line: 'Answer the questions. Fix the thing she asks about. Cheaper than a lobbyist, and she might write it down.', fx: { income: -2, happy: 6 } } },
-    { id: 'union', needs: { lobbyists: 10 }, title: "They're organizing", setup: 'There is a meeting in the laundry room. Nobody is doing laundry.',
+    { id: 'union', needs: { lobbyists: 10 }, title: "They're organizing", setup: 'There is a meeting in the laundry room. Nobody is doing laundry.', ask: 'Do you recognize the union?',
       preston: { label: 'A mandatory meeting', line: 'A mandatory meeting about why unions are sad. Catering is from the Company Store.', fx: { happy: -6 } },
       dolores: { label: 'Recognize the union', line: "Lobbyists, unionizing. You'd think they'd lobby you about it. They did. This is me.", fx: { income: -3, happy: 12, health: 4 } } },
-    { id: 'bonus_day', needs: { lobbyists: 25 }, title: 'Bonus season', setup: 'The quarter went well. Someone should be rewarded.',
+    { id: 'bonus_day', needs: { lobbyists: 25 }, title: 'Bonus season', setup: 'The quarter went well. Someone should be rewarded.', ask: 'Who gets the bonus?',
       preston: { label: 'Bonus yourself', line: 'Leadership is a lonely burden and should be compensated accordingly.', fx: { cash: 40, happy: -8 } },
       dolores: { label: 'Bonus them', line: 'Split it. Evenly. Yes, including the ones in the ball pit.', fx: { cash: -30, happy: 12 } } },
-    { id: 'merger', needs: { cash: 120 }, title: 'A merger offer', setup: 'The town across the river is for sale. They have a lake. The lake is, allegedly, mostly water.',
+    { id: 'merger', needs: { cash: 120 }, title: 'A merger offer', setup: 'The town across the river is for sale. They have a lake. The lake is, allegedly, mostly water.', ask: 'Do you buy the town?',
       preston: { label: 'Buy the town', line: 'Synergies. Economies of scale. Also, a lake.', fx: { cash: -100, income: 12, happy: -4 } },
       dolores: { label: 'Pay down the clinic', line: "Pass. Put it toward the people who already live here. They're closer.", fx: { cash: -40, health: 6, happy: 4 } } },
     // Small, cheap, and they come back around. A side with `sets` leaves a mark
     // on the town; later cards need that mark to appear.
-    { id: 'lobby_art', title: 'The lobby art', setup: 'The lobby wall is blank. Several lobbyists have noticed. One has a ladder.',
+    { id: 'lobby_art', title: 'The lobby art', setup: 'The lobby wall is blank. Several lobbyists have noticed. One has a ladder.', ask: 'What goes on the wall?',
       preston: { label: 'Motivational posters', line: '"Hustle." "Grind." "Teamwork," with an eagle. Laminated, so they can never come down.', fx: { happy: -1 }, sets: 'posters' },
       dolores: { label: 'Let them paint a mural', line: 'They have a ladder and a plan. The plan involves a whale. I did not ask why.', fx: { cash: -5, happy: 2 }, sets: 'mural' } },
-    { id: 'coffee_cups', title: 'The coffee cups', setup: 'The break room is out of cups again. There is a theory about where they go.',
+    { id: 'coffee_cups', title: 'The coffee cups', setup: 'The break room is out of cups again. There is a theory about where they go.', ask: 'How do you solve the cups?',
       preston: { label: 'One cup per person, per day', line: 'A cup policy. Enforced by a cup registry. Staffed by a cup officer.', fx: { income: 1, happy: -2 }, sets: 'cup_policy' },
       dolores: { label: 'Buy mugs with their names on', line: "Twelve dollars. They'll wash them. They'll guard them. They'll bring them to Lobbyfest.", fx: { cash: -6, happy: 2 }, sets: 'mugs' } },
-    { id: 'intern', title: 'An intern', setup: 'A college student wants to learn about lobbying. She is already better at it than most of the staff.',
+    { id: 'intern', title: 'An intern', setup: 'A college student wants to learn about lobbying. She is already better at it than most of the staff.', ask: 'Does she get paid?',
       preston: { label: 'Unpaid internship', line: 'She is paid in experience. Experience is priceless, which is why we are not pricing it.', fx: { cash: 5, happy: -2 }, sets: 'unpaid_intern' },
       dolores: { label: 'Pay the intern', line: "Minimum wage. She'll remember who paid her. So will her very online friends.", fx: { cash: -8, happy: 1 }, sets: 'paid_intern' } },
-    { id: 'holiday', title: 'A holiday request', setup: 'The lobbyists would like the day off for a holiday. The holiday is "Thursday."',
+    { id: 'holiday', title: 'A holiday request', setup: 'The lobbyists would like the day off for a holiday. The holiday is "Thursday."', ask: 'Does Thursday happen?',
       preston: { label: 'Mark it with a sale', line: 'Thursday Sale. Fifteen percent off at the Company Store, redeemable on Thursdays, while working.', fx: { income: 2, happy: -3 }, sets: 'holiday_sale' },
       dolores: { label: 'Give them the day', line: 'Everyone gets Thursday. Thursday is now a thing. You did that.', fx: { cash: -8, happy: 4 }, sets: 'holiday_off' } },
-    { id: 'suggestion_box', title: 'A suggestion box', setup: 'Someone has suggested a suggestion box. The suggestion was made verbally, which is the problem.',
+    { id: 'suggestion_box', title: 'A suggestion box', setup: 'Someone has suggested a suggestion box. The suggestion was made verbally, which is the problem.', ask: 'Does the box get read?',
       preston: { label: 'Install it. Never open it.', line: 'The box is the message. The contents are a liability.', fx: { happy: -1 }, sets: 'box_ignored' },
       dolores: { label: 'Install it, read it Fridays', line: "I'll read them to you. You'll hate some of them. That's the point.", fx: { cash: -2, happy: 2 }, sets: 'box_read' } },
-    { id: 'lawn', title: 'The lawn', setup: 'The patch of grass behind Housing has not been mowed. Something is living in it.',
-      preston: { label: 'Astroturf', line: 'Green forever. Never grows, never dies, never asks for anything. My ideal tenant.', fx: { cash: -10, income: 1 }, sets: 'astroturf' },
-      dolores: { label: 'Let it grow', line: "Leave it. Whatever's in there is paying more attention to the lobbyists than you are.", fx: { health: 1 }, sets: 'wild_lawn' } },
-    { id: 'name_badges', title: 'Name badges', setup: 'HR has ordered name badges. HR would like to know what goes on them.',
-      preston: { label: 'Numbers', line: 'Names change. Numbers scale. Lobbyist 0047 reports to Lobbyist 0012, forever.', fx: { income: 1, happy: -3 }, sets: 'numbered' },
+    { id: 'lawn', title: 'The lawn', setup: 'The patch of grass behind Housing has not been mowed. Something is living in it.', ask: 'What do you do with the lawn?',
+      preston: { label: 'Lay astroturf', line: 'Green forever. Never grows, never dies, never asks for anything. My ideal tenant.', fx: { cash: -10, income: 1 }, sets: 'astroturf' },
+      dolores: { label: 'Let it grow wild', line: "Leave it. Whatever's in there is paying more attention to the lobbyists than you are.", fx: { health: 1 }, sets: 'wild_lawn' } },
+    { id: 'name_badges', title: 'Name badges', setup: 'HR has ordered name badges. HR would like to know what goes on them.', ask: 'What goes on the badges?',
+      preston: { label: 'Numbers, not names', line: 'Names change. Numbers scale. Lobbyist 0047 reports to Lobbyist 0012, forever.', fx: { income: 1, happy: -3 }, sets: 'numbered' },
       dolores: { label: 'First names, big type', line: 'First names. Big type. Dolores, in big type, is a lot. I accept this.', fx: { cash: -4, happy: 2 }, sets: 'named' } },
 
     // The consequences.
-    { id: 'mural_viral', needs: { flag: 'mural' }, title: 'The mural went viral', setup: 'Someone posted the whale. The whale has 40,000 likes. The whale has a fan account.',
+    { id: 'mural_viral', needs: { flag: 'mural' }, title: 'The mural went viral', setup: 'Someone posted the whale. The whale has 40,000 likes. The whale has a fan account.', ask: 'What do you do with the fame?',
       preston: { label: 'Sell prints', line: 'Limited edition. Signed by you. You did not paint it, but you did own the wall.', fx: { cash: 20, happy: -3 } },
       dolores: { label: 'Credit the painters', line: 'Put their names on it. Big type. Yes, I have a theme.', fx: { happy: 7 } } },
-    { id: 'posters_edited', needs: { flag: 'posters' }, title: 'Someone edited the posters', setup: 'The eagle now has a speech bubble. The speech bubble is about your parking policy. It is accurate.',
+    { id: 'posters_edited', needs: { flag: 'posters' }, title: 'Someone edited the posters', setup: 'The eagle now has a speech bubble. The speech bubble is about your parking policy. It is accurate.', ask: 'What do you do about the edits?',
       preston: { label: 'Find the culprit', line: 'Handwriting analysis. Hallway cameras. A reward, payable in cups.', fx: { cash: -10, happy: -5 } },
       dolores: { label: 'Leave them up', line: "They're funnier now. Morale is up for the first time since the posters.", fx: { happy: 5 } } },
-    { id: 'mug_thief', needs: { flag: 'mugs' }, title: 'The mug thief', setup: "Three mugs are missing. Dolores's is one of them. She has a list of suspects. The list is everyone.",
-      preston: { label: 'Cameras in the break room', line: 'Small ones. Tasteful ones. Ones that are also microphones.', fx: { cash: -12, happy: -5, health: -1 } },
+    { id: 'mug_thief', needs: { flag: 'mugs' }, title: 'The mug thief', setup: "Three mugs are missing. Dolores's is one of them. She has a list of suspects. The list is everyone.", ask: 'How do you handle the missing mugs?',
+      preston: { label: 'Put cameras in the break room', line: 'Small ones. Tasteful ones. Ones that are also microphones.', fx: { cash: -12, happy: -5, health: -1 } },
       dolores: { label: 'Buy three more mugs', line: "It's six dollars. I'll let the thief keep mine. I'll know.", fx: { cash: -6, happy: 3 } } },
-    { id: 'cup_audit', needs: { flag: 'cup_policy' }, title: 'The cup audit', setup: 'The cup officer has found irregularities. The cup officer has requested a deputy.',
+    { id: 'cup_audit', needs: { flag: 'cup_policy' }, title: 'The cup audit', setup: 'The cup officer has found irregularities. The cup officer has requested a deputy.', ask: 'Does the cup officer get a deputy?',
       preston: { label: 'Fund the deputy', line: 'Two cup officers. A cup division. Cups, finally, under control.', fx: { cash: -8, income: 2, happy: -4 } },
       dolores: { label: 'Repeal the policy', line: 'Give them the cups. Give the cup officer a mug. Never speak of this.', fx: { income: -1, happy: 5 } } },
-    { id: 'intern_ideas', needs: { flag: 'paid_intern' }, title: 'The intern has ideas', setup: "She has a plan to cut the clinic's wait time in half. It's good. It's annoyingly good.",
+    { id: 'intern_ideas', needs: { flag: 'paid_intern' }, title: 'The intern has ideas', setup: "She has a plan to cut the clinic's wait time in half. It's good. It's annoyingly good.", ask: 'Whose idea is it?',
       preston: { label: 'Take the credit', line: 'Present it as yours. She will understand. That is what interns are for.', fx: { cash: 10, happy: -4 } },
       dolores: { label: 'Promote her', line: 'Give her a title and a raise. She will run this place in five years. Be on her good side.', fx: { income: -1, happy: 6, health: 3 } } },
-    { id: 'intern_blog', needs: { flag: 'unpaid_intern' }, title: 'The intern wrote a blog post', setup: 'It is titled "What I Learned at TrickleTown." It is extremely well written. It has been shared by a senator.',
+    { id: 'intern_blog', needs: { flag: 'unpaid_intern' }, title: 'The intern wrote a blog post', setup: 'It is titled "What I Learned at TrickleTown." It is extremely well written. It has been shared by a senator.', ask: 'How do you answer the post?',
       preston: { label: 'Lawyer up', line: 'Cease, desist, and a strongly worded gift basket.', fx: { cash: -20, happy: -3 } },
       dolores: { label: 'Pay her, retroactively', line: 'Back pay, an apology, and a quote for her follow-up post. She will be fair. Fairer than you were.', fx: { cash: -15, happy: 4 } } },
-    { id: 'thursday', needs: { flag: 'holiday_off' }, title: 'Thursday is a tradition now', setup: 'There is a parade. There is a float. The float is a papier-mâché version of you, and it is flattering, mostly.',
+    { id: 'thursday', needs: { flag: 'holiday_off' }, title: 'Thursday is a tradition now', setup: 'There is a parade. There is a float. The float is a papier-mâché version of you, and it is flattering, mostly.', ask: 'How do you treat the parade?',
       preston: { label: 'Charge admission', line: 'Five dollars to see the float. Ten to ride it. Twenty to be on it.', fx: { cash: 10, happy: -4 } },
       dolores: { label: 'Show up with a cake', line: 'Bring a cake. Stand next to the float. Wave. It costs a cake.', fx: { cash: -5, happy: 7 } } },
-    { id: 'box_full', needs: { flag: 'box_read' }, title: 'The box is full', setup: 'Dolores has read all of them. Forty-one are about the parking lot. One is a poem. It is also about the parking lot.',
+    { id: 'box_full', needs: { flag: 'box_read' }, title: 'The box is full', setup: 'Dolores has read all of them. Forty-one are about the parking lot. One is a poem. It is also about the parking lot.', ask: 'What do you do with the suggestions?',
       preston: { label: 'Shred and reset', line: 'A full box is a finished box. We thank them for their input.', fx: { happy: -5 } },
       dolores: { label: 'Act on three', line: "Pick three. Do them. Tell them which three. That's the whole trick.", fx: { cash: -15, happy: 8, health: 2 } } },
-    { id: 'box_found', needs: { flag: 'box_ignored' }, title: 'They found out', setup: 'Someone opened the suggestion box. It was empty. Not because nobody wrote anything. Because of the mice.',
+    { id: 'box_found', needs: { flag: 'box_ignored' }, title: 'They found out', setup: 'Someone opened the suggestion box. It was empty. Not because nobody wrote anything. Because of the mice.', ask: 'What do you say to them?',
       preston: { label: 'Deny everything', line: 'The box was decorative. The mice are contractors.', fx: { happy: -6 } },
       dolores: { label: 'Open it now, in front of them', line: 'Read what survived. Out loud. It will be bad. It will be better after.', fx: { cash: -5, happy: 3 } } },
-    { id: 'bees', needs: { flag: 'wild_lawn' }, title: 'Bees', setup: 'The lawn has bees. A lobbyist has started a hive. He has a smoker and a very calm voice.',
+    { id: 'bees', needs: { flag: 'wild_lawn' }, title: 'Bees', setup: 'The lawn has bees. A lobbyist has started a hive. He has a smoker and a very calm voice.', ask: 'What happens to the bees?',
       preston: { label: 'Sell the honey', line: 'TrickleTown Honey. Small-batch. Extracted, if you will.', fx: { cash: 12, happy: -1 } },
       dolores: { label: 'Leave the bees', line: "Let him keep the bees. Everyone's calmer. Nobody knows why. It's the bees. Also there is honey now, and people pay for honey.", fx: { income: 1, happy: 4, health: 2 } } },
-    { id: 'number_pride', needs: { flag: 'numbered' }, title: "They've started going by their numbers", setup: '0047 and 0012 are dating. 0003 has a podcast. It is called "Three."',
+    { id: 'number_pride', needs: { flag: 'numbered' }, title: "They've started going by their numbers", setup: '0047 and 0012 are dating. 0003 has a podcast. It is called "Three."', ask: 'Do the numbers stay?',
       preston: { label: 'Lean in, sell merch', line: 'Numbered hoodies. Numbered mugs, if we had mugs. A numbered future.', fx: { cash: 8, happy: -2 } },
       dolores: { label: 'Give the names back', line: 'New badges. First names. 0003 is keeping the podcast name. I negotiated.', fx: { cash: -4, happy: 6 } } },
 
     // Round three: more small ones, and cards that need friends or a streak.
-    { id: 'wifi', title: 'The wifi password', setup: 'The wifi password is on a sticky note on the router. The sticky note is also the only copy.',
-      preston: { label: 'Rotate it weekly, sell the new one', line: 'Fifty cents a week. Connectivity is a privilege. A tiered privilege.', fx: { income: 1, happy: -2 }, sets: 'wifi_paid' },
-      dolores: { label: 'Put it on the wall', line: "Paint it on the wall. Big type. You know how I feel about big type.", fx: { happy: 2 }, sets: 'wifi_free' } },
-    { id: 'dress_code', title: 'A dress code', setup: 'HR would like a dress code. HR has drawn a diagram. The diagram has a lot of arrows.',
-      preston: { label: 'Mandatory blazers', line: 'Navy. Company crest. Deducted from pay, so technically they own them.', fx: { cash: -10, happy: -3 }, sets: 'blazers' },
+    { id: 'wifi', title: 'The wifi password', setup: 'Everyone keeps asking for the wifi password. It is on a sticky note on the router, the sticky note is the only copy, and the router is in a closet nobody can find.', ask: 'How do people get the password?',
+      preston: { label: 'Change it weekly, sell the new one', line: 'Fifty cents a week. Connectivity is a privilege. A tiered privilege.', fx: { income: 1, happy: -2 }, sets: 'wifi_paid' },
+      dolores: { label: 'Paint it on the wall, free', line: "Paint it on the wall. Big type. You know how I feel about big type.", fx: { happy: 2 }, sets: 'wifi_free' } },
+    { id: 'dress_code', title: 'A dress code', setup: 'HR would like a dress code. HR has drawn a diagram. The diagram has a lot of arrows.', ask: 'Is there a dress code?',
+      preston: { label: 'Mandatory blazers, deducted from pay', line: 'Navy. Company crest. Deducted from pay, so technically they own them.', fx: { cash: -10, happy: -3 }, sets: 'blazers' },
       dolores: { label: 'Casual Fridays', line: 'Casual Fridays. Then casual Thursdays. I have a roadmap.', fx: { happy: 3 }, sets: 'casual' } },
-    { id: 'cat', title: 'A cat', setup: 'A cat has moved into the lobby. She has chosen the good chair. Nobody has objected.',
+    { id: 'cat', title: 'A cat', setup: 'A cat has moved into the lobby. She has chosen the good chair. Nobody has objected.', ask: 'What\'s the cat\'s job?',
       preston: { label: 'Charge for petting', line: 'A dollar a pet. She is a revenue stream with whiskers.', fx: { income: 1, happy: -1 }, sets: 'cat_fee' },
       dolores: { label: "She's the mascot now", line: 'Her name is Comptroller. She has a badge. It says "Comptroller."', fx: { cash: -4, happy: 4 }, sets: 'cat_mascot' } },
-    { id: 'wifi_leak', needs: { flag: 'wifi_paid' }, title: 'Someone shared the password', setup: "It's on a lamppost. It's on the lampposts in the next town. It's on a billboard, and the billboard was not cheap.",
+    { id: 'wifi_leak', needs: { flag: 'wifi_paid' }, title: 'Someone shared the password', setup: "It's on a lamppost. It's on the lampposts in the next town. It's on a billboard, and the billboard was not cheap.", ask: 'What do you do now that everyone has it?',
       preston: { label: 'Cut the wifi', line: 'No wifi, no problem. They can lobby by mail.', fx: { happy: -6 } },
       dolores: { label: 'Make it free, say sorry', line: 'Free wifi and an apology. The apology is the expensive part.', fx: { income: -1, happy: 5 } } },
-    { id: 'blazer_revolt', needs: { flag: 'blazers' }, title: 'The blazers are in the dumpster', setup: 'All of them. Folded. There is a note. The note is polite, which is somehow worse.',
-      preston: { label: 'Bill them', line: 'Forty dollars a blazer, payable in installments, with interest.', fx: { cash: 10, happy: -6 } },
+    { id: 'blazer_revolt', needs: { flag: 'blazers' }, title: 'The blazers are in the dumpster', setup: 'All of them. Folded. There is a note. The note is polite, which is somehow worse.', ask: 'What do you do about the blazers?',
+      preston: { label: 'Bill them for the blazers', line: 'Forty dollars a blazer, payable in installments, with interest.', fx: { cash: 10, happy: -6 } },
       dolores: { label: 'Casual, forever', line: 'The dumpster has spoken. It usually does, eventually.', fx: { happy: 6 } } },
-    { id: 'cat_agent', needs: { flag: 'cat_mascot' }, title: 'Comptroller has an agent', setup: 'The cat has been offered a commercial. The agent is a lobbyist. Of course he is.',
-      preston: { label: 'Merch', line: 'Comptroller mugs. Comptroller blazers. Comptroller, the fragrance.', fx: { cash: 15, happy: -2 } },
-      dolores: { label: 'A window seat', line: 'She gets the window. The sunny one. That is the whole negotiation.', fx: { happy: 5, health: 1 } } },
-    { id: 'visitor', needs: { friends: 1 }, title: 'A friend stopped by', setup: 'One of your friends came to see the village. They are standing in the lobby, taking notes. Or pictures. Notes and pictures.',
+    { id: 'cat_agent', needs: { flag: 'cat_mascot' }, title: 'Comptroller has an agent', setup: 'The cat has been offered a commercial. The agent is a lobbyist. Of course he is.', ask: 'Does the cat take the deal?',
+      preston: { label: 'Sell Comptroller merch', line: 'Comptroller mugs. Comptroller blazers. Comptroller, the fragrance.', fx: { cash: 15, happy: -2 } },
+      dolores: { label: 'Give her the window seat', line: 'She gets the window. The sunny one. That is the whole negotiation.', fx: { happy: 5, health: 1 } } },
+    { id: 'visitor', needs: { friends: 1 }, title: 'A friend stopped by', setup: 'One of your friends came to see the village. They are standing in the lobby, taking notes. Or pictures. Notes and pictures.', ask: 'How do you host them?',
       preston: { label: 'The tour, then the upsell', line: 'Free tour. Gift shop at the end. The gift shop is the tour.', fx: { cash: 5, happy: -1 } },
       dolores: { label: 'Lunch at the Company Store', line: 'Buy them lunch. Let them meet the lobbyists. Let the lobbyists complain. It is good for everyone.', fx: { cash: -6, happy: 4 } } },
-    { id: 'rivalry', needs: { friends: 3 }, title: "Your friends' towns are nicer", setup: 'The lobbyists have seen the other villages. One of them has a pool. An actual pool.',
+    { id: 'rivalry', needs: { friends: 3 }, title: "Your friends' towns are nicer", setup: 'The lobbyists have seen the other villages. One of them has a pool. An actual pool.', ask: 'How do you answer the nicer towns?',
       preston: { label: 'Poach their lobbyists', line: 'Signing bonuses. Non-competes. A fruit basket with a contract in it.', fx: { income: 3, happy: -4 } },
       dolores: { label: 'Host a block party', line: 'Invite the other towns. Feed everyone. Let them see we are fine. We are fine.', fx: { cash: -20, happy: 10 } } },
-    { id: 'streak_week', needs: { streak: 7 }, title: 'A week straight', setup: "Seven days in a row. The lobbyists noticed. They've made a banner. The banner is slightly off-center.",
+    { id: 'streak_week', needs: { streak: 7 }, title: 'A week straight', setup: "Seven days in a row. The lobbyists noticed. They've made a banner. The banner is slightly off-center.", ask: 'How do you mark a week?',
       preston: { label: 'Mandatory applause', line: 'Announce it. Applause, two minutes, logged.', fx: { cash: 10, happy: -3 } },
       dolores: { label: 'Afternoon off, for everyone', line: 'You showed up seven days. So did they. Give them the afternoon.', fx: { cash: -5, happy: 6, health: 3 } } },
-    { id: 'streak_month', needs: { streak: 30 }, title: 'A month straight', setup: 'Thirty days. There is talk of naming something after you. The talk is coming from you.',
+    { id: 'streak_month', needs: { streak: 30 }, title: 'A month straight', setup: 'Thirty days. There is talk of naming something after you. The talk is coming from you.', ask: 'What gets named?',
       preston: { label: 'Name a building after you', line: 'The Pinnacle becomes The You. Rent goes up, because it is The You now.', fx: { income: 3, happy: -5 } },
       dolores: { label: 'Name it after them', line: 'Name it after the lobbyists. All of them. The sign will be long. The sign will be loved.', fx: { happy: 12 } } },
-    { id: 'audit', needs: { cash: 200 }, title: 'An audit', setup: 'An auditor has arrived. She is very calm. She has a pencil. She has already found the ball pit.',
+    { id: 'audit', needs: { cash: 200 }, title: 'An audit', setup: 'An auditor has arrived. She is very calm. She has a pencil. She has already found the ball pit.', ask: 'How do you handle the auditor?',
       preston: { label: 'Creative accounting', line: 'The ball pit is a research facility. The casino is a wellness center. I have receipts, in the sense that I have printed them.', fx: { cash: 25, happy: -2 }, sets: 'cooked_books' },
       dolores: { label: 'Pay the fine', line: 'Pay it. Fix the thing. She will be back, and it is better if she likes us.', fx: { cash: -30, happy: 3 } } },
-    { id: 'audit_return', needs: { flag: 'cooked_books' }, title: 'The auditor is back', setup: 'She has a second pencil. She has questions about the research facility.',
+    { id: 'audit_return', needs: { flag: 'cooked_books' }, title: 'The auditor is back', setup: 'She has a second pencil. She has questions about the research facility.', ask: 'What do you tell her this time?',
       preston: { label: 'Lawyer up', line: 'Every lawyer in the county. Several from the next one.', fx: { cash: -40, happy: -2 } },
       dolores: { label: 'Come clean', line: 'Tell her everything. Pay what we owe. Sleep, for once.', fx: { cash: -25, happy: 5, health: 2 } } },
 
-    { id: 'whale', needs: { upgrade: 'vip' }, title: 'A whale in the VIP room', setup: 'He has been there for three days. He is the only one in the room. He seems to like the rope.',
+    { id: 'whale', needs: { upgrade: 'vip' }, title: 'A whale in the VIP room', setup: 'He has been there for three days. He is the only one in the room. He seems to like the rope.', ask: 'What do you do with the whale?',
       preston: { label: 'Comp everything', line: 'Suite, steak, a second rope. He is our quarter.', fx: { cash: 30, health: -5, happy: -2 } },
       dolores: { label: 'Cut him off', line: 'Walk him home. He lives in the Tenement. Or he did.', fx: { cash: -5, happy: 3, health: 2 } } },
-    { id: 'harvest', needs: { upgrade: 'garden' }, title: 'Harvest day', setup: 'The garden produced. Mostly zucchini. An alarming amount of zucchini.',
-      preston: { label: 'Sell it', line: 'Farmers market. Artisanal. Forty dollars a zucchini, and we do not explain why.', fx: { cash: 10, happy: -3 } },
-      dolores: { label: 'Potluck', line: 'Everybody brings a dish. All the dishes are zucchini. It is still a potluck. The leftovers go to the farmers market; the lobbyists keep the till.', fx: { income: 1, happy: 6, health: 2 } } },
+    { id: 'harvest', needs: { upgrade: 'garden' }, title: 'Harvest day', setup: 'The garden produced. Mostly zucchini. An alarming amount of zucchini.', ask: 'What happens to the zucchini?',
+      preston: { label: 'Sell it at the farmers market', line: 'Farmers market. Artisanal. Forty dollars a zucchini, and we do not explain why.', fx: { cash: 10, happy: -3 } },
+      dolores: { label: 'Throw a potluck', line: 'Everybody brings a dish. All the dishes are zucchini. It is still a potluck. The leftovers go to the farmers market; the lobbyists keep the till.', fx: { income: 1, happy: 6, health: 2 } } },
 
     // Round four: more small daily ones with consequences, more follow-ups,
     // and some cards that only a thriving town ever sees.
-    { id: 'lunch_hour', title: 'The lunch hour', setup: 'Nobody can agree on how long lunch is. HR has a stopwatch. HR has always had a stopwatch.',
+    { id: 'lunch_hour', title: 'The lunch hour', setup: 'Nobody can agree on how long lunch is. HR has a stopwatch. HR has always had a stopwatch.', ask: 'How long is lunch?',
       preston: { label: 'Thirty minutes, timed', line: 'Thirty minutes. The stopwatch is already here. It would be a shame to waste it.', fx: { income: 1, happy: -3 }, sets: 'short_lunch' },
       dolores: { label: 'An hour, outside', line: 'An hour. Outside. Sunlight is free and nobody has found a way to invoice it yet.', fx: { happy: 3, health: 1 }, sets: 'long_lunch' } },
-    { id: 'elevator', title: 'The elevator', setup: 'The elevator stopped between floors. The lobbyists inside have formed a committee.',
-      preston: { label: 'Stairs are cardio', line: 'Close it. Call it a wellness initiative. Put a poster on every landing.', fx: { cash: 5, health: -2, happy: -2 }, sets: 'stairs' },
-      dolores: { label: 'Fix it', line: 'Fix the elevator. The committee has drafted bylaws. It is getting serious in there.', fx: { cash: -18, happy: 3 }, sets: 'elevator_fixed' } },
-    { id: 'newsletter', title: 'A company newsletter', setup: 'Someone wants to start a newsletter. "The Trickle." The name was not negotiable.',
-      preston: { label: 'Sponsored content', line: 'Every issue brought to you by the Company Store. Every article, also, about the Company Store.', fx: { income: 1, happy: -1 }, sets: 'newsletter_ads' },
+    { id: 'elevator', title: 'The elevator', setup: 'The elevator stopped between floors. The lobbyists inside have formed a committee.', ask: 'What happens to the elevator?',
+      preston: { label: 'Close it; stairs are cardio', line: 'Close it. Call it a wellness initiative. Put a poster on every landing.', fx: { cash: 5, health: -2, happy: -2 }, sets: 'stairs' },
+      dolores: { label: 'Fix the elevator', line: 'Fix the elevator. The committee has drafted bylaws. It is getting serious in there.', fx: { cash: -18, happy: 3 }, sets: 'elevator_fixed' } },
+    { id: 'newsletter', title: 'A company newsletter', setup: 'Someone wants to start a newsletter. "The Trickle." The name was not negotiable.', ask: 'Who runs the newsletter?',
+      preston: { label: 'Fill it with sponsored content', line: 'Every issue brought to you by the Company Store. Every article, also, about the Company Store.', fx: { income: 1, happy: -1 }, sets: 'newsletter_ads' },
       dolores: { label: 'Let them write it', line: 'Their newsletter. Their words. You will not enjoy every issue, which is how you know it is working.', fx: { happy: 3 }, sets: 'newsletter_free' } },
-    { id: 'fire_drill', title: 'Fire drill', setup: 'The annual fire drill is due. The fire marshal has left three voicemails. The third was just sighing.',
+    { id: 'fire_drill', title: 'Fire drill', setup: 'The annual fire drill is due. The fire marshal has left three voicemails. The third was just sighing.', ask: 'Does the drill happen?',
       preston: { label: 'Sign the form, skip the drill', line: 'Everyone knows where the door is. It is the big one that says "door."', fx: { cash: 4, health: -1 }, sets: 'no_drill' },
       dolores: { label: 'Run the drill', line: 'Twenty minutes. Everybody outside. The cat goes first; she has made that clear.', fx: { cash: -3, health: 2 } } },
-    { id: 'holiday_party', title: 'The holiday party', setup: 'There is a budget line for a party. It is a small line. It has a question mark next to it.',
+    { id: 'holiday_party', title: 'The holiday party', setup: 'There is a budget line for a party. It is a small line. It has a question mark next to it.', ask: 'What kind of party is it?',
       preston: { label: 'Cash bar, mandatory', line: 'Attendance is required. Drinks are not. That is where the margin lives.', fx: { cash: 8, happy: -4 } },
       dolores: { label: 'Open bar, optional', line: 'Nobody has to come. Everybody will. Budget for that.', fx: { cash: -25, happy: 9, health: -1 } } },
-    { id: 'newsletter_expose', needs: { flag: 'newsletter_free' }, title: 'The newsletter ran an exposé', setup: 'Issue four is about you. It is well sourced. One of the sources is the cat.',
+    { id: 'newsletter_expose', needs: { flag: 'newsletter_free' }, title: 'The newsletter ran an exposé', setup: 'Issue four is about you. It is well sourced. One of the sources is the cat.', ask: 'How do you answer the exposé?',
       preston: { label: 'Shut it down', line: 'Freedom of the press is a lovely idea for a press we do not own.', fx: { income: 1, happy: -6 } },
       dolores: { label: 'Print a correction, fix the thing', line: 'They were right about the boiler. Fix the boiler. Let them print that too.', fx: { cash: -10, happy: 5, health: 1 } } },
-    { id: 'small_fire', needs: { flag: 'no_drill' }, title: 'A small fire', setup: 'A small fire. In the break room. Everyone went toward it, to look.',
+    { id: 'small_fire', needs: { flag: 'no_drill' }, title: 'A small fire', setup: 'A small fire. In the break room. Everyone went toward it, to look.', ask: 'What happens after the fire?',
       preston: { label: 'Call it a controlled burn', line: 'We were going to replace that microwave anyway. Now we have a reason, and a smell.', fx: { cash: -8, health: -5, happy: -3 } },
       dolores: { label: 'Evacuate, then drills forever', line: 'Everybody out. Then the drill. Then the drill every month, until they can do it asleep, because one day they might be.', fx: { cash: -15, health: 3, happy: 2 } } },
-    { id: 'elevator_music', needs: { flag: 'elevator_fixed' }, title: 'The elevator has music now', setup: 'Nobody installed it. It is just there. It is one song.',
-      preston: { label: 'Sell the slot', line: 'Thirty seconds of audio, captive audience, four floors. Advertisers call that a dream.', fx: { income: 1, happy: -1 } },
+    { id: 'elevator_music', needs: { flag: 'elevator_fixed' }, title: 'The elevator has music now', setup: 'Nobody installed it. It is just there. It is one song.', ask: 'What do you do with the music?',
+      preston: { label: 'Sell the ad slot', line: 'Thirty seconds of audio, captive audience, four floors. Advertisers call that a dream.', fx: { income: 1, happy: -1 } },
       dolores: { label: 'Let the lobbyists pick', line: 'A playlist. Everyone gets a song. The cat gets two; she pushed the button.', fx: { happy: 3 } } },
-    { id: 'lunch_truck', needs: { flag: 'long_lunch' }, title: 'A food truck found you', setup: 'A taco truck has started parking outside at noon. The lobbyists are, for once, early for something.',
+    { id: 'lunch_truck', needs: { flag: 'long_lunch' }, title: 'A food truck found you', setup: 'A taco truck has started parking outside at noon. The lobbyists are, for once, early for something.', ask: 'What\'s the deal with the truck?',
       preston: { label: 'Charge it rent', line: 'Prime curb. Hungry crowd. Rent, plus a percentage, plus the good tacos for the office.', fx: { income: 2, happy: -2 } },
       dolores: { label: 'Give it the good corner', line: 'The sunny corner. Free. In exchange for nothing, which is what good neighbors charge. Lunch gets faster, and so does the afternoon.', fx: { income: 1, happy: 4, health: 1 } } },
-    { id: 'headhunter', needs: { happiness_below: 35 }, title: 'A headhunter in the lobby', setup: 'A recruiter from the next town is handing out cards. The lobbyists are taking them. Some are taking two.',
+    { id: 'headhunter', needs: { happiness_below: 35 }, title: 'A headhunter in the lobby', setup: 'A recruiter from the next town is handing out cards. The lobbyists are taking them. Some are taking two.', ask: 'How do you keep them?',
       preston: { label: 'Non-competes, retroactive', line: 'They cannot leave if they cannot work anywhere else. It is elegant, in a way.', fx: { income: 2, happy: -5 } },
-      dolores: { label: 'Counteroffers', line: 'Match the offers. Every one. It is cheaper than finding out what an empty town costs.', fx: { income: -3, happy: 8 } } },
-    { id: 'health_inspector', needs: { health_below: 45 }, title: 'The health inspector', setup: 'She arrived unannounced. She is wearing gloves. She brought her own gloves.',
+      dolores: { label: 'Make counteroffers', line: 'Match the offers. Every one. It is cheaper than finding out what an empty town costs.', fx: { income: -3, happy: 8 } } },
+    { id: 'health_inspector', needs: { health_below: 45 }, title: 'The health inspector', setup: 'She arrived unannounced. She is wearing gloves. She brought her own gloves.', ask: 'What does she get to see?',
       preston: { label: 'A tour of the nice floor', line: 'Show her the lobby. Show her the lobby again. The lobby is very photogenic.', fx: { cash: -10, health: -3 } },
       dolores: { label: 'Show her everything', line: 'Open every door. Write down what she says. Do what she says. She is the cheapest consultant you will ever meet.', fx: { cash: -20, health: 9, happy: 2 } } },
-    { id: 'profile', needs: { happiness_above: 80 }, title: 'A magazine wants the story', setup: 'A journalist wants to profile TrickleTown. "The company town that works." She seems suspicious of the premise. So are you.',
+    { id: 'profile', needs: { happiness_above: 80 }, title: 'A magazine wants the story', setup: 'A journalist wants to profile TrickleTown. "The company town that works." She seems suspicious of the premise. So are you.', ask: 'Does she get the story?',
       preston: { label: 'Charge for the interview', line: 'Access is a product. Candor is a premium tier.', fx: { cash: 15, happy: -2 } },
       dolores: { label: 'Let the lobbyists talk', line: 'Point her at the lobbyists. Walk away. Whatever they say, you earned.', fx: { happy: 4 }, sets: 'profiled' } },
-    { id: 'profile_fallout', needs: { flag: 'profiled' }, title: 'The article is out', setup: 'It is mostly kind. It quotes the cat. Three other towns have called to ask how you did it.',
+    { id: 'profile_fallout', needs: { flag: 'profiled' }, title: 'The article is out', setup: 'It is mostly kind. It quotes the cat. Three other towns have called to ask how you did it.', ask: 'What do you tell the other towns?',
       preston: { label: 'Sell them a consultancy', line: 'TrickleTown Solutions. A deck, a retainer, a lanyard.', fx: { cash: 20, happy: -1 } },
       dolores: { label: 'Tell them for free', line: 'Tell them. Build the clinic. Fix the walls. Listen. It is not a secret, which is why nobody believes it. They will send their new hires here to learn, and new hires buy lunch.', fx: { income: 2, happy: 5, health: 2 } } },
-    { id: 'thriving', needs: { health_above: 85 }, title: 'Nobody is sick', setup: 'The clinic is empty. The nurse is reading. Someone has started a running club, voluntarily, which is unsettling.',
+    { id: 'thriving', needs: { health_above: 85 }, title: 'Nobody is sick', setup: 'The clinic is empty. The nurse is reading. Someone has started a running club, voluntarily, which is unsettling.', ask: 'What do you do with an empty clinic?',
       preston: { label: 'Cut the clinic hours', line: 'Nobody is using it. Half the hours, same sign.', fx: { income: 3, health: -4 } },
       dolores: { label: 'Keep it open', line: 'It is empty because it is open. That is the whole idea. It is working. Leave it.', fx: { happy: 3 } } },
-    { id: 'followers', needs: { friends: 5 }, title: 'Your friends are watching', setup: 'Five of your friends can see this village. One of them has been refreshing. You can tell.',
+    { id: 'followers', needs: { friends: 5 }, title: 'Your friends are watching', setup: 'Five of your friends can see this village. One of them has been refreshing. You can tell.', ask: 'Do your friends see the numbers?',
       preston: { label: 'Hide the meters', line: 'A village is only as unhappy as the public can prove.', fx: { income: 1, happy: -2 } },
       dolores: { label: 'Post the numbers in the lobby', line: 'Happiness, health, on a board, every morning. If you are embarrassed by the numbers, change the numbers.', fx: { happy: 3 } } },
-    { id: 'pool_party', needs: { upgrade: 'pool' }, title: 'Pool party', setup: 'The pool is small. The party is not.',
-      preston: { label: 'Tickets', line: 'A velvet rope, but wet. Admission, towels extra.', fx: { cash: 12, happy: -2 } },
+    { id: 'pool_party', needs: { upgrade: 'pool' }, title: 'Pool party', setup: 'The pool is small. The party is not.', ask: 'Who gets in the pool?',
+      preston: { label: 'Sell tickets', line: 'A velvet rope, but wet. Admission, towels extra.', fx: { cash: 12, happy: -2 } },
       dolores: { label: 'Open swim', line: 'Everybody in. The cat is a lifeguard. She did not apply; she was simply there.', fx: { happy: 6, health: 2 } } },
     // Round five: every mark gets a card that comes back for it.
-    { id: 'sale_stampede', needs: { flag: 'holiday_sale' }, title: 'The Thursday Sale stampede', setup: 'Fifteen percent off has drawn a crowd. The crowd is the lobbyists. They are shopping on the clock, which is the only time the sale is valid.',
+    { id: 'sale_stampede', needs: { flag: 'holiday_sale' }, title: 'The Thursday Sale stampede', setup: 'Fifteen percent off has drawn a crowd. The crowd is the lobbyists. They are shopping on the clock, which is the only time the sale is valid.', ask: 'What happens to the sale?',
       preston: { label: 'Raise prices Wednesday', line: 'Up fifteen Wednesday, down fifteen Thursday. The sale is real. The math is also real.', fx: { income: 2, happy: -4 } },
       dolores: { label: 'Make Thursday a real holiday', line: 'Give them the day. Close the store. A sale nobody can shop at is a sign, not a sale.', fx: { income: -1, happy: 5 }, sets: 'holiday_off' } },
-    { id: 'astroturf_melt', needs: { flag: 'astroturf' }, title: 'The astroturf melted', setup: 'August happened. The lawn is now a texture. The smell has been described as "a new car, on fire."',
+    { id: 'astroturf_melt', needs: { flag: 'astroturf' }, title: 'The astroturf melted', setup: 'August happened. The lawn is now a texture. The smell has been described as "a new car, on fire."', ask: 'What replaces the astroturf?',
       preston: { label: 'Paint it green', line: 'Green paint. Outdoor grade. It will look exactly like it did, from the road, at night.', fx: { cash: -4, health: -2 } },
       dolores: { label: 'Real grass, finally', line: 'Grass. Seed. Water. It will take a season, and nobody will have to explain the smell to the inspector.', fx: { cash: -12, happy: 3, health: 2 }, sets: 'wild_lawn' } },
-    { id: 'name_plaque', needs: { flag: 'named' }, title: 'The badges have fans', setup: 'The big-type first names caught on. Lobbyists from the next town over are asking for badges. There is a waiting list for a badge.',
-      preston: { label: 'Sell them', line: 'Forty dollars a badge. Sixty with a lanyard. The lanyard costs us a dollar.', fx: { cash: 12, happy: -1 } },
+    { id: 'name_plaque', needs: { flag: 'named' }, title: 'The badges have fans', setup: 'The big-type first names caught on. Lobbyists from the next town over are asking for badges. There is a waiting list for a badge.', ask: 'Who gets a badge?',
+      preston: { label: 'Sell the badges', line: 'Forty dollars a badge. Sixty with a lanyard. The lanyard costs us a dollar.', fx: { cash: 12, happy: -1 } },
       dolores: { label: 'Give one to anyone who asks', line: 'A badge costs nothing and says "we see you." Hand them out. Spell the names right.', fx: { cash: -5, happy: 4 } } },
-    { id: 'wifi_traffic', needs: { flag: 'wifi_free' }, title: "Everyone's on the wifi", setup: 'Free wifi worked. The whole town is streaming. The router has a fan now, and the fan has a sound.',
+    { id: 'wifi_traffic', needs: { flag: 'wifi_free' }, title: "Everyone's on the wifi", setup: 'Free wifi worked. The whole town is streaming. The router has a fan now, and the fan has a sound.', ask: 'Does the bandwidth get bigger?',
       preston: { label: 'Throttle it after six', line: 'Full speed during work. A trickle after. A trickle is on brand.', fx: { income: 1, happy: -2 } },
       dolores: { label: 'Buy more bandwidth', line: 'A bigger pipe. It is the cheapest thing anyone has asked for this month.', fx: { cash: -10, happy: 3 } } },
-    { id: 'casual_thursday', needs: { flag: 'casual' }, title: 'Casual Thursday', setup: 'Casual Friday has crept into Thursday, as promised. Somebody wore a robe. It was a nice robe.',
+    { id: 'casual_thursday', needs: { flag: 'casual' }, title: 'Casual Thursday', setup: 'Casual Friday has crept into Thursday, as promised. Somebody wore a robe. It was a nice robe.', ask: 'How casual does it get?',
       preston: { label: 'Sell the company hoodie', line: 'Branded. Comfortable. Technically a uniform, legally a souvenir.', fx: { cash: 10, happy: -1 } },
       dolores: { label: 'Casual, all week', line: 'The roadmap ends here. Wear what you want. The robe stays, within reason.', fx: { happy: 4 } } },
-    { id: 'cat_strike', needs: { flag: 'cat_fee' }, title: 'The cat has gone on strike', setup: 'Comptroller has stopped accepting pets, paid or otherwise. She sits on the register. She stares.',
+    { id: 'cat_strike', needs: { flag: 'cat_fee' }, title: 'The cat has gone on strike', setup: 'Comptroller has stopped accepting pets, paid or otherwise. She sits on the register. She stares.', ask: 'How do you end the cat\'s strike?',
       preston: { label: 'Replace the cat', line: 'A new cat. A cheaper cat. A cat that understands the business.', fx: { cash: -8, happy: -5 } },
       dolores: { label: 'Refund the petting fees', line: 'Give the money back. Apologize to the cat. She will not accept it, but the lobbyists will notice you tried.', fx: { cash: -10, income: -1, happy: 5 } } },
-    { id: 'lunch_smuggling', needs: { flag: 'short_lunch' }, title: 'Lunch is being smuggled', setup: 'Thirty-minute lunches have produced a black market in sandwiches. There is a guy. Everyone knows the guy.',
-      preston: { label: 'Bag checks', line: 'Random bag checks. For sandwiches. HR has volunteered. HR is very excited.', fx: { income: 1, happy: -4 } },
+    { id: 'lunch_smuggling', needs: { flag: 'short_lunch' }, title: 'Lunch is being smuggled', setup: 'Thirty-minute lunches have produced a black market in sandwiches. There is a guy. Everyone knows the guy.', ask: 'What do you do about the sandwiches?',
+      preston: { label: 'Bag checks at the door', line: 'Random bag checks. For sandwiches. HR has volunteered. HR is very excited.', fx: { income: 1, happy: -4 } },
       dolores: { label: 'Give the hour back', line: 'An hour. The guy retires. Everyone eats sitting down, like people.', fx: { income: -1, happy: 4, health: 1 }, sets: 'long_lunch' } },
-    { id: 'stair_fall', needs: { flag: 'stairs' }, title: 'Someone fell on the stairs', setup: 'Cardio claimed a victim. He is fine. He is also, as of this morning, represented.',
-      preston: { label: 'A waiver', line: 'Everyone signs a stair waiver. Retroactively. The lawyer says that is fine and the lawyer is on retainer.', fx: { cash: 2, health: -3, happy: -3 } },
+    { id: 'stair_fall', needs: { flag: 'stairs' }, title: 'Someone fell on the stairs', setup: 'Cardio claimed a victim. He is fine. He is also, as of this morning, represented.', ask: 'How do you handle the claim?',
+      preston: { label: 'Make everyone sign a waiver', line: 'Everyone signs a stair waiver. Retroactively. The lawyer says that is fine and the lawyer is on retainer.', fx: { cash: 2, health: -3, happy: -3 } },
       dolores: { label: 'Fix the elevator, finally', line: 'Fix it. Pay the man. Put a plaque on the elevator that says "finally."', fx: { cash: -22, happy: 4, health: 2 }, sets: 'elevator_fixed' } },
-    { id: 'newsletter_nobody', needs: { flag: 'newsletter_ads' }, title: 'Nobody reads the newsletter', setup: 'Issue three was entirely about the Company Store. Issue four, also. Readership is one, and it is the cat, and she is using it as a mat.',
+    { id: 'newsletter_nobody', needs: { flag: 'newsletter_ads' }, title: 'Nobody reads the newsletter', setup: 'Issue three was entirely about the Company Store. Issue four, also. Readership is one, and it is the cat, and she is using it as a mat.', ask: 'What do you do with a newsletter nobody reads?',
       preston: { label: 'Make reading it mandatory', line: 'A quiz. Weekly. Scores are posted. The newsletter has never been more read, technically.', fx: { income: 1, happy: -3 } },
       dolores: { label: 'Hand it to the lobbyists', line: 'Let them write it. They will write about you. That is what a newsletter is for.', fx: { happy: 3 }, sets: 'newsletter_free' } },
-    { id: 'dental_day', needs: { upgrade: 'dental' }, title: 'Free dental day', setup: 'The dental wing is offering a free day. The line is around the block. Everyone is smiling, carefully.',
+    { id: 'dental_day', needs: { upgrade: 'dental' }, title: 'Free dental day', setup: 'The dental wing is offering a free day. The line is around the block. Everyone is smiling, carefully.', ask: 'What does free dental day include?',
       preston: { label: 'Charge for the fluoride', line: 'The exam is free. The fluoride is an upgrade. The toothbrush is a souvenir, and souvenirs are not free.', fx: { cash: 6, health: -1 } },
       dolores: { label: 'Floss for everyone', line: 'Floss. Toothbrushes. A pamphlet that is actually read. Teeth, finally, in the budget.', fx: { health: 4, happy: 2 } } },
   ];
@@ -428,7 +428,7 @@
     if (!needs) return 'Everyone gets this one.';
     const parts = [];
     if (needs.days != null) parts.push(`${needs.days} day${needs.days === 1 ? '' : 's'} after building`);
-    if (needs.cash != null) parts.push(`have $${needs.cash} on the coin at dawn`);
+    if (needs.cash != null) parts.push(`have $${needs.cash}K on the coin at dawn`);
     if (needs.lobbyists != null) parts.push(`hire ${needs.lobbyists} lobbyists, career`);
     if (needs.friends != null) parts.push(`have ${needs.friends} friend${needs.friends === 1 ? '' : 's'}`);
     if (needs.streak != null) parts.push(`a ${needs.streak}-day streak`);
@@ -546,7 +546,7 @@
     if (side !== 'preston' && side !== 'dolores') return { error: 'Pick Preston or Dolores.' };
     const fx = BY_ID.get(issueId)[side].fx;
     const cash = cardCost(t, fx);
-    if (cash < 0 && cashAvailable < -cash) return { error: `That costs $${-cash} and you have $${cashAvailable.toFixed(2)} on the coin.` };
+    if (cash < 0 && cashAvailable < -cash) return { error: `That costs $${-cash}K and you have $${cashAvailable.toFixed(1)}K on the coin.` };
     applyFx(t, fx);
     slot.chosen = side;
     if (!t.played.includes(issueId)) t.played.push(issueId);
@@ -561,11 +561,12 @@
     if (!PLOTS[slot]) return { error: 'No such plot.' };
     if (!PLOTS[slot].options[key]) return { error: 'No such building.' };
     if (t.plots[slot] === key) return { error: "It's already there." };
-    if (cashAvailable < BUILD_COST) return { error: `Building costs $${BUILD_COST}. You have $${cashAvailable.toFixed(2)} on the coin.` };
+    const cost = PLOTS[slot].options[key].cost || BUILD_COST;
+    if (cashAvailable < cost) return { error: `${PLOTS[slot].options[key].name} costs $${cost}K. You have $${cashAvailable.toFixed(1)}K on the coin.` };
     t.plots[slot] = key;
     t.upgrades[slot] = []; // the old building's upgrades go with it
     t.built[slot] = day;
-    return { cash: -BUILD_COST };
+    return { cash: -cost };
   }
 
   function upgrade(t, slot, key, cashAvailable, ctx = {}) {
@@ -576,7 +577,7 @@
     if (!u) return { error: `${b.name} doesn't offer that.` };
     if (t.upgrades[slot].includes(key)) return { error: 'Already built.' };
     if (!needsMet(u.needs, t, { ...ctx, cash: cashAvailable }, slot)) return { error: `${u.name} isn't on the table yet. ${needsText(u.needs)}` };
-    if (cashAvailable < u.cost) return { error: `${u.name} costs $${u.cost}. You have $${cashAvailable.toFixed(2)} on the coin.` };
+    if (cashAvailable < u.cost) return { error: `${u.name} costs $${u.cost}K. You have $${cashAvailable.toFixed(1)}K on the coin.` };
     t.upgrades[slot].push(key);
     return { cash: -u.cost };
   }
@@ -596,6 +597,24 @@
   }
   // Per-day pushes scaled so the arrows read like a week.
   const dailyClues = (e) => clues({ income: e.income, happy: (e.happy || 0) * 3, health: (e.health || 0) * 3 });
+  // Buildings aren't a mystery: their exact daily push is shown.
+  const fxOf = (o) => ({ income: o.income || 0, happy: o.happy || 0, health: o.health || 0 });
+
+  // "Unlocked: you've hired 5 lobbyists." for a proposal that's on the table.
+  function unlockedText(needs) {
+    if (!needs) return 'Always available.';
+    const parts = [];
+    if (needs.days != null) parts.push(`the building is ${needs.days} day${needs.days === 1 ? '' : 's'} old`);
+    if (needs.cash != null) parts.push(`you had $${needs.cash}K on the coin at dawn`);
+    if (needs.lobbyists != null) parts.push(`you've hired ${needs.lobbyists} lobbyists`);
+    if (needs.friends != null) parts.push(`you have ${needs.friends} friend${needs.friends === 1 ? '' : 's'}`);
+    if (needs.streak != null) parts.push(`your streak hit ${needs.streak} days`);
+    if (needs.happiness_below != null) parts.push(`happiness is under ${needs.happiness_below}`);
+    if (needs.health_below != null) parts.push(`health is under ${needs.health_below}`);
+    if (needs.happiness_above != null) parts.push(`happiness is over ${needs.happiness_above}`);
+    if (needs.health_above != null) parts.push(`health is over ${needs.health_above}`);
+    return parts.length ? `Unlocked because ${parts.join(' and ')}.` : 'Unlocked.';
+  }
 
   function motto(t) {
     const tiers = Object.keys(PLOTS).map((s) => building(s, t.plots[s])).filter(Boolean).map((b) => b.tier);
@@ -633,7 +652,10 @@
           days: t.built[slot] && ctx.day ? dayDiff(t.built[slot], ctx.day) : 0,
           proposals: b ? Object.entries(b.upgrades).filter(([uk, u]) => !t.upgrades[slot].includes(uk) && needsMet(u.needs, t, ctx, slot)).length : 0,
           building: b ? {
-            key: t.plots[slot], name: b.name, tier: b.tier, sign: b.sign,
+            key: t.plots[slot], name: b.name, tier: b.tier, sign: b.sign, cost: b.cost || BUILD_COST,
+            perk: b.card_discount ? `Cards cost ${Math.round(b.card_discount * 100)}% less` : null,
+            effects: fxOf(b),
+            total: plotEffects(t, slot),
             clues: dailyClues(plotEffects(t, slot)),
             upgrades: Object.entries(b.upgrades).map(([uk, u]) => {
               const owned = t.upgrades[slot].includes(uk);
@@ -642,17 +664,19 @@
                 owned,
                 status: owned ? 'owned' : needsMet(u.needs, t, ctx, slot) ? 'available' : 'locked',
                 needs: needsText(u.needs),
+                unlocked_by: needsMet(u.needs, t, ctx, slot) ? unlockedText(u.needs) : null,
+                effects: fxOf(u),
                 clues: dailyClues(u),
               };
             }),
           } : null,
-          options: Object.entries(p.options).map(([key, o]) => ({ key, name: o.name, tier: o.tier, pitch: o.pitch, clues: dailyClues(o) })),
+          options: Object.entries(p.options).map(([key, o]) => ({ key, name: o.name, tier: o.tier, cost: o.cost || BUILD_COST, pitch: o.pitch, effects: fxOf(o), perk: o.card_discount ? `Cards cost ${Math.round(o.card_discount * 100)}% less` : null, clues: dailyClues(o) })),
         };
       }),
       issues: (t.issues || []).map((s) => {
         const i = BY_ID.get(s.id);
         if (!i) return null;
-        return { id: i.id, title: i.title, setup: i.setup, general: !i.needs, chosen: s.chosen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), preston: sideView(i, 'preston'), dolores: sideView(i, 'dolores') };
+        return { id: i.id, title: i.title, setup: i.setup, ask: i.ask || '', general: !i.needs, chosen: s.chosen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), preston: sideView(i, 'preston'), dolores: sideView(i, 'dolores') };
       }).filter(Boolean),
       // The whole collection, for the deck view.
       deck: ISSUES.map((i) => {

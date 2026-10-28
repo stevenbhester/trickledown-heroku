@@ -301,6 +301,81 @@ it." It didn't.
   right, a tails village on the left, a crowd of lobbyists, and a faint rain
   of bills in the gutters, all inline SVG. Phones get the rain only.
 
+## The cards and buildings pass (tester notes, round three)
+
+- **Cards didn't read as decisions.** Every one of the 77 now carries an
+  explicit ask under its setup ("How do people get the password?") with
+  "Preston and Dolores each have an answer; pick one." The vague labels
+  became actions ("Charge for parking", "Paint it on the wall, free",
+  "Close it; stairs are cardio"). The wifi setup now states the problem.
+- **Buildings looked identical.** The arrow chips capped at ▲▲▲, so a
+  +$18K slum and a +$8K high-rise both showed "Allowance ▲▲▲". Buildings
+  and upgrades aren't secrets, so they now show their exact daily push
+  ("Every day: +$18K allowance · −3 happiness · −4 health") on the build
+  menu, the office, the zone tiles and the upgrade result; the advisors'
+  cards keep their arrows, since not knowing is the game there.
+- **Why build the slum?** Because it's cheap. Buildings have their own
+  prices now: Tenement Row $20K, The Pinnacle $40K, Maple Co-op $60K;
+  Casino $30K, Company Store $40K (and 20% off every card), Free Clinic
+  $60K. The slum also pays $18K/day (was $15K). A new player with ~$70K
+  after vesting can afford the extractive pair on day one and discover
+  what that costs; the decent pair takes saving. The build menu says all
+  of this in one paragraph, including what happiness and health actually
+  do.
+- **Upgrades didn't explain themselves.** A proposal now opens with "An
+  add-on to The Pinnacle for $40K, one time. Buy it and it pushes the
+  numbers below every day on top of what the building already does. Pass
+  and it waits," the numbers, and why it's on the table ("Unlocked because
+  you've hired 5 lobbyists"). The buttons say "Buy it for $40K" and "Pass
+  for now."
+
+## A pass for fun, onboarding and time in the game
+
+What a session looks like now, and what was added to make each beat land:
+
+1. **Land** on a page that shows the game (coins, village, the rain of
+   money) and says the whole premise in three lines. Training is a button,
+   not a gate.
+2. **First minute.** The Buy section walks the first investment in three
+   numbered steps and promises the gift. The vesting memo delivers it,
+   the ceremony turns the tax into people, one button flips the coin, and
+   the tour runs. Two cards are already waiting behind the flip.
+3. **Every visit after that opens with a to-do strip** under the coin:
+   collect KO (ready at +31%), play 2 cards, invest the $30K on the coin,
+   build on the empty lot from $20K, hear a proposal. Each line is a
+   button that takes you there. When it's all done it says so and when
+   the next thing lands ("KO matures in 6h 12m; new money in 13h").
+4. **Something to watch.** The live ticker makes a fresh buy move within
+   seconds; the real move shows two decimals while it's small.
+5. **Something to come back for.** Allowance only lands on days you show
+   up, the streak grows it, positions mature on a 24-hour clock from when
+   you bought, and the village changes overnight (the report, the cards,
+   a proposal that just unlocked).
+
+What I'd do next, in order of expected payoff:
+
+- **A morning report on first load**: "Overnight: KO matured +31%,
+  happiness 62 → 58 (the cup policy), 2 new cards, the doorman proposal
+  unlocked." It's one paragraph built from data the server already has
+  (`town.report`, matured positions, newly unlocked deck entries) and it
+  makes the 24-hour loop feel like a story. Half a day.
+- **Weekly Lobbyfest preview** on the Lobby page: where each charity
+  stands and what your lobbyists would move if they switched. Gives the
+  charity pick stakes.
+- **Streak freeze**, one per month, Duolingo-style. Cheap, and it's the
+  single biggest retention mechanic in daily games.
+- **Push or email at maturity** is the obvious retention lever and the
+  one thing this architecture can't do without adding a channel. If
+  email ever exists for password reset, a "your positions matured" mail
+  is one query.
+- **Reactions on friends' coins** (a thumbs-up on a Legend cash-out)
+  would make the friends feature social instead of voyeuristic. Needs a
+  table and a notification spot; a day.
+- **Balance watch after a week of real players**: the numbers to look at
+  are hire cost distribution, how many towns sit under health 50, and
+  how often rides go to ×30. `npm test` keeps the invariants; the feel is
+  what the data will say.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored
