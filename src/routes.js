@@ -6,6 +6,7 @@ const prices = require('./prices');
 const assets = require('./assets');
 const auth = require('./auth');
 const maturer = require('./maturer');
+const Town = require('./town');
 
 const router = express.Router();
 
@@ -24,6 +25,26 @@ function publicUser(u) {
     charity_id: u.charity_id,
     badges: game.badgesFor(u.total_donated),
   };
+}
+
+// Unhealthy lobbyists quit overnight. They leave this quarter's payroll in
+// proportion to where they were hired, recorded as negative donations so
+// every total stays a plain SUM. Returns how many quit.
+async function applyQuitting(user, quarter, rate) {
+  const { rows } = await query(
+    `SELECT charity_id, SUM(amount)::float8 AS n FROM donations
+      WHERE user_id = $1 AND quarter = $2 GROUP BY charity_id HAVING SUM(amount) > 0`,
+    [user.id, quarter],
+  );
+  let quit = 0;
+  for (const r of rows) {
+    const lost = game.round2(r.n * rate);
+    if (lost <= 0) continue;
+    await query('INSERT INTO donations (user_id, charity_id, amount, quarter) VALUES ($1, $2, $3, $4)', [user.id, r.charity_id, -lost, quarter]);
+    quit = game.round2(quit + lost);
+  }
+  // Career totals (users.total_donated, ranks) keep counting everyone you ever hired.
+  return quit;
 }
 
 // A position as the client sees it. Matured ones use their frozen price;
@@ -184,16 +205,28 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
   if (user.last_allowance_day !== day.key) {
     const yesterday = game.addDays(day.key, -1);
     const streak = user.last_allowance_day === yesterday ? user.streak + 1 : 1;
-    const amount = game.allowanceFor(streak);
+    // A new day in the village: buildings push the meters, today's issues are
+    // dealt, and the town's income joins the allowance (it can subtract).
+    const town = user.town || Town.fresh();
+    const { report } = Town.tick(town, { day: day.key, uid: user.id });
+    const base = game.allowanceFor(streak);
+    const amount = game.round2(Math.max(10, base + report.income));
     const { rows } = await query(
       `UPDATE users
-         SET cash = cash + $1, streak = $2, last_allowance_day = $3, last_seen_at = now()
+         SET cash = cash + $1, streak = $2, last_allowance_day = $3, last_seen_at = now(), town = $5
        WHERE id = $4 AND last_allowance_day IS DISTINCT FROM $3
        RETURNING *`,
-      [amount, streak, day.key, user.id],
+      [amount, streak, day.key, user.id, town],
     );
-    if (rows[0]) { user = rows[0]; allowance = { amount, streak }; }
-    else { ({ rows: [user] } = await query('SELECT * FROM users WHERE id = $1', [user.id])); }
+    if (rows[0]) {
+      user = rows[0];
+      allowance = { amount, streak, base, town_income: report.income };
+      if (report.quit_rate > 0) {
+        report.quit = await applyQuitting(user, day.quarter, report.quit_rate);
+        user.town = { ...town, report };
+        await query('UPDATE users SET town = $1 WHERE id = $2', [user.town, user.id]);
+      }
+    } else { ({ rows: [user] } = await query('SELECT * FROM users WHERE id = $1', [user.id])); }
   } else {
     await query('UPDATE users SET last_seen_at = now() WHERE id = $1', [user.id]);
   }
@@ -210,7 +243,8 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
 
   const { rows: history } = await query(
     `SELECT p.id, p.symbol, p.name, p.invested, p.proceeds, p.profit, p.tax, p.tier, p.closed_at, p.closed_day,
-            (p.matured_at IS NOT NULL) AS collected, c.name AS charity_name
+            (p.matured_at IS NOT NULL) AS collected, c.name AS charity_name,
+            (SELECT SUM(d.amount) FROM donations d WHERE d.position_id = p.id)::float8 AS lobbyists
        FROM positions p LEFT JOIN charities c ON c.id = p.charity_id
       WHERE p.user_id = $1 AND p.status = 'closed'
       ORDER BY p.closed_at DESC LIMIT 12`,
@@ -240,7 +274,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
   const { rows: byCharity } = await query(
     `SELECT c.id, c.name, c.slug,
             COALESCE(SUM(d.amount) FILTER (WHERE d.quarter = $2), 0)::float8 AS amount,
-            COUNT(*) FILTER (WHERE d.quarter = $2)::int AS times,
+            COUNT(*) FILTER (WHERE d.quarter = $2 AND d.amount > 0)::int AS times,
             SUM(d.amount)::float8 AS all_time
        FROM donations d JOIN charities c ON c.id = d.charity_id
       WHERE d.user_id = $1 GROUP BY c.id ORDER BY amount DESC, all_time DESC`,
@@ -255,6 +289,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     rules: { tax_rate: cfg.taxRate, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
     positions,
     history,
+    town: Town.view(user.town || Town.fresh()),
     donations_by_charity: byCharity,
     crowd: { picks: crowd, ...crowdTotal },
     today_donated: todayGiven.amount,
@@ -379,6 +414,9 @@ router.post('/sell', auth.requireUser, wrap(async (req, res) => {
 
   const now = new Date();
   const day = game.dayKey(now);
+  // The recruiter's rate depends on how happy your village is.
+  const hireCost = Town.hireCost(req.user.town || Town.fresh());
+  const lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
 
   const result = await withTx(async (tx) => {
     const { rows: [locked] } = await tx.query(
@@ -395,12 +433,13 @@ router.post('/sell', auth.requireUser, wrap(async (req, res) => {
       `UPDATE users SET cash = cash + $1, total_donated = total_donated + $2, realized_pnl = realized_pnl + $3,
               charity_id = COALESCE($4, charity_id)
        WHERE id = $5 RETURNING *`,
-      [s.net, s.tax, s.profit, charity ? charity.id : null, p.user_id],
+      [s.net, lobbyists, s.profit, charity ? charity.id : null, p.user_id],
     );
-    if (s.tax > 0) {
+    if (lobbyists > 0) {
+      // donations.amount is a headcount of lobbyists, not dollars.
       await tx.query(
         'INSERT INTO donations (user_id, charity_id, position_id, amount, quarter) VALUES ($1, $2, $3, $4, $5)',
-        [u.id, charity.id, p.id, s.tax, game.quarterKey(day)],
+        [u.id, charity.id, p.id, lobbyists, game.quarterKey(day)],
       );
     }
     return { user: u };
@@ -422,9 +461,47 @@ router.post('/sell', auth.requireUser, wrap(async (req, res) => {
       collected: !!p.matured_at,   // true = matured and collected in full; false = sold early
       exit_price: exitPrice,
       ...s,
+      lobbyists,
+      hire_cost: hireCost,
       charity: charity ? { id: charity.id, name: charity.name, slug: charity.slug } : null,
     },
   });
+}));
+
+// --- The village -------------------------------------------------------------------
+
+// Pick Preston's or Dolores's answer to one of today's issues.
+router.post('/town/decide', auth.requireUser, wrap(async (req, res) => {
+  const { issue_id: issueId, side } = req.body || {};
+  const result = await withTx(async (tx) => {
+    const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    const town = u.town || Town.fresh();
+    const r = Town.decide(town, String(issueId || ''), side, u.cash);
+    if (r.error) return r;
+    const { rows: [u2] } = await tx.query(
+      'UPDATE users SET cash = GREATEST(0, cash + $1), town = $2 WHERE id = $3 RETURNING *', [r.cash, town, u.id],
+    );
+    return { user: u2, cash: r.cash };
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json({ ok: true, cash_change: result.cash, user: publicUser(result.user), town: Town.view(result.user.town) });
+}));
+
+// Put up (or replace) a building on a plot.
+router.post('/town/build', auth.requireUser, wrap(async (req, res) => {
+  const { slot, key } = req.body || {};
+  const result = await withTx(async (tx) => {
+    const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    const town = u.town || Town.fresh();
+    const r = Town.build(town, String(slot || ''), String(key || ''), u.cash);
+    if (r.error) return r;
+    const { rows: [u2] } = await tx.query(
+      'UPDATE users SET cash = cash + $1, town = $2 WHERE id = $3 RETURNING *', [r.cash, town, u.id],
+    );
+    return { user: u2 };
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json({ ok: true, user: publicUser(result.user), town: Town.view(result.user.town) });
 }));
 
 // --- Public boards ---------------------------------------------------------------

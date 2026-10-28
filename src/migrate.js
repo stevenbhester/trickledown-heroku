@@ -63,6 +63,9 @@ ALTER TABLE positions ADD COLUMN IF NOT EXISTS matured_value NUMERIC(14,2);
 UPDATE positions SET matures_at = opened_at + interval '24 hours' WHERE matures_at IS NULL;
 CREATE INDEX IF NOT EXISTS positions_matures ON positions(status, matures_at) WHERE matured_at IS NULL;
 
+-- The village (src/town.js). Null until the first visit after this ships.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS town JSONB;
+
 -- "Let it ride": a matured position rolled into a fresh one in the same asset.
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS rolled_from INTEGER REFERENCES positions(id);
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS ride_count INTEGER NOT NULL DEFAULT 0;
