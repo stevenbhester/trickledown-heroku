@@ -59,13 +59,25 @@ function allowanceFor(streak) {
 
 // The multiplier ramps with age: MULT_FLOOR (×1) the moment you buy, rising
 // linearly to the position's full multiplier at maturity, where it stays.
-// Selling early means selling at a smaller multiplier.
+// Selling early means selling at a smaller multiplier. A ride (see
+// rideMultipliers) starts where the last day ended instead of at ×1.
 function effectiveMultiplier(p, at = Date.now()) {
   const opened = new Date(p.opened_at).getTime();
   const matures = p.matures_at ? new Date(p.matures_at).getTime() : opened + cfg.holdHours * 3600e3;
   const k = Math.max(0, Math.min(1, (at - opened) / Math.max(1, matures - opened)));
-  const floor = Math.min(cfg.multFloor, p.multiplier);
+  const floor = Math.min(p.mult_floor != null ? p.mult_floor : cfg.multFloor, p.multiplier);
   return floor + (p.multiplier - floor) * k;
+}
+
+// The multipliers for a ride off a matured position: the new day starts at
+// the old ceiling and climbs by the asset's base multiplier again (stocks
+// ×10 → ×20, crypto ×5 → ×10), up to RIDE_MAX_STEPS rides past the first
+// day; after that it rides flat at the cap.
+function rideMultipliers(prev, base) {
+  const cap = base * (1 + cfg.rideMaxSteps);
+  const floor = Math.min(prev.multiplier, cap);
+  const ceiling = Math.min(floor + base, cap);
+  return { floor, ceiling };
 }
 
 // What a position is worth at a given instant. The real move is amplified by
@@ -98,12 +110,17 @@ function tierFor({ invested, value }) {
 }
 
 // Closing a position: profit is taxed, loss is not. The tax is the donation.
-function settle({ invested, value }) {
+// `deferred` is tax carried over from a ride (the half it skipped): charged
+// here when a ride is sold early, never more than what's left.
+function settle({ invested, value, deferred = 0 }, rate = cfg.taxRate) {
   const profit = round2(value - invested);
-  const tax = profit > 0 ? round2(profit * cfg.taxRate) : 0;
+  const own = profit > 0 ? round2(profit * rate) : 0;
+  const due = round2(Math.min(Math.max(0, deferred), Math.max(0, value - own)));
+  const tax = round2(own + due);
   return {
     profit,
     tax,
+    deferred_tax: due,
     net: round2(value - tax),
     tier: tierFor({ invested, value }),
   };
@@ -129,5 +146,5 @@ function badgesFor(totalDonated) {
 
 module.exports = {
   round2, dayKey, addDays, nextReset, dayNumber, quarterKey, quarterEnd,
-  allowanceFor, effectiveMultiplier, valueOf, tierFor, settle, badgesFor, BADGES,
+  allowanceFor, effectiveMultiplier, rideMultipliers, valueOf, tierFor, settle, badgesFor, BADGES,
 };

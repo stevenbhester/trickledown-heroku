@@ -15,21 +15,43 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
   position's full multiplier at maturity: stocks ×10, crypto ×5 (`MULT_STOCK`,
   `MULT_CRYPTO`). The full multiplier is stored on the position, so changing
   the config later doesn't rewrite history.
-- At maturity the position freezes: `src/maturer.js` runs every
-  `MATURE_POLL_MS` (60s), quotes anything past `matures_at`, and stores
-  `matured_price` / `matured_value` at the full multiplier. `/me` and `/sell`
-  also freeze lazily, so a late timer never shows a matured position moving.
+- At maturity the position freezes: `matured_price` / `matured_value` are
+  stored at the full multiplier and it stops moving until collected. Three
+  things do the freezing, in this order of preference: a Heroku Scheduler job
+  (`node scripts/mature.js`, every 10 minutes; see DEPLOY.md) that runs
+  whether or not the web dyno is awake; the web dyno's own timer
+  (`MATURE_POLL_MS`, 60s) while it is; and `/me`, `/sell`, `/ride` and
+  `/players` for the rows in front of them. A freeze more than
+  `MATURE_LATE_MS` (10 min) after the mark uses the price the game logged
+  nearest the mark (`price_log`: every quote fetched, one row per symbol per
+  minute, kept `PRICE_LOG_DAYS` = 7); if there is none, it uses the current
+  price and sets `matured_late`, which the receipt admits to. So nothing
+  grows while a player is away, and a position's value is logged at (or
+  within ten minutes of) 24 hours from purchase.
 - `/sell` is both "collect" and "sell early": a matured position pays out its
   frozen value in full; a live one re-quotes and pays out at the current price
   and current multiplier. A profit is taxed `TAX_RATE` (25%); losses aren't.
   A position at zero can be "buried" (same endpoint). The receipt and history
   carry `collected: true|false`.
 - `/ride` ("let it ride") is the third option for a matured position: the
-  frozen value is reinvested in the same asset at today's price as a new
-  position (status of the old one becomes `rolled`, which keeps it out of
-  history and the boards). No tax, no lobbyists, the clock and the multiplier
-  ramp start over. `ride_count` and `origin_invested` follow the chain so the
-  UI can say "riding ×3, started with $50".
+  profit so far is taxed at `TAX_RATE × RIDE_TAX_FACTOR` (12.5% by default,
+  half the collect rate), those lobbyists are hired for the chosen charity,
+  and what's left is reinvested in the same asset at today's price as a new
+  position. The old one's status becomes `rolled`; it shows in history with
+  `rode: true` and counts on the 24h board. `ride_count` and `origin_invested`
+  follow the chain so the UI can say "riding ×3, started with $50".
+  - **The multiplier keeps climbing.** The new position's `mult_floor` is the
+    old ceiling and its `multiplier` is one base multiplier higher: stocks
+    ×10 → ×20 on the second day, ×20 → ×30 on the third; crypto ×5 → ×10 →
+    ×15. After `RIDE_MAX_STEPS` (2) rides it runs flat at the cap. A ride
+    at ×20 dies on a 5% dip, which is the point.
+  - **The other half of the tax is deferred**, stored as `deferred_tax` on
+    the new position. Sell the ride early and it comes due (so an early sell
+    of a ride really is full rate on the original profit, plus the usual tax
+    on anything new); hold it to maturity and it's forgiven. Without this,
+    ride-then-sell-early seconds later at the same cached price realized the
+    gain at half tax with no risk taken. Without any tax at all, riding was
+    strictly better than collecting and the charity never saw a cent.
 - **The tax hires lobbyists.** Every play-money dollar of tax hires one
   lobbyist for a charity the player picks. In the database and the API these
   are still called `donations` / `total_donated` (one lobbyist = $1 of tax);
@@ -55,9 +77,13 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
 bad / compromise / good building and two upgrades per building; a deck of
 cards Preston and Dolores bring two of a day (one everyone gets, one from
 whatever the player's town has unlocked: a building, an upgrade, a career
-headcount, cash on the coin at dawn, or happiness/health below a threshold);
+headcount, cash on the coin at dawn, friends, a streak, a flag set by an
+earlier card, or happiness/health past a threshold). Unplayed cards come
+first; a follow-up you've answered doesn't come back, and emergent ones (a
+strike, the flu, a magazine profile of a thriving town) return no more than
+weekly. 77 cards as of this writing;
 and the four numbers they push: daily income (added to the allowance),
-happiness (sets the recruiter's rate per lobbyist), health (below 40,
+happiness (sets the recruiter's rate per lobbyist, $1.25 to 75¢), health (below 50,
 lobbyists quit overnight), and one-time cash. The town opens once the player
 has hired one full lobbyist. The file is pure rules and is byte-identical to
 the front end's `js/town.js`; edit one, copy to the other. `/me` returns the
@@ -79,14 +105,66 @@ whole view (`town`), including every card's unlock status for the deck grid.
 | GET | `/me` | ✓ | grants today's money if due; portfolio with live values, history, today's crowd picks |
 | POST | `/buy` | ✓ | `{ symbol, amount }` |
 | POST | `/sell` | ✓ | `{ position_id, charity_id }` — collects a matured position in full, or sells a live one early (charity required only when there's a profit) |
-| POST | `/ride` | ✓ | `{ position_id }` — let a matured position ride: its frozen value becomes a fresh 24h position in the same asset at today's price, untaxed |
+| POST | `/ride` | ✓ | `{ position_id, charity_id? }` — let a matured position ride: profit taxed at half rate now (the other half deferred), the rest becomes a fresh 24h position in the same asset at today's price with the multiplier climbing from where it ended |
 | GET | `/trickle` | | per-charity shares this quarter + all time |
-| POST | `/town/decide` | ✓ | `{ issue_id, side }` — play one of today's cards with Preston's or Dolores's answer; returns the real `fx` |
+| POST | `/town/decide` | ✓ | `{ issue_id, side }` — play one of today's cards with Preston's or Dolores's answer; returns the real `fx` and `crowd` (how everyone else answered it today) |
 | POST | `/town/build` | ✓ | `{ slot, key }` — put a building on a plot ($40); replacing one clears its upgrades |
 | POST | `/town/upgrade` | ✓ | `{ slot, key }` — buy an upgrade for the building on a plot |
-| GET | `/leaderboard` | | all-time donations; best lock-in in the last 24h |
+| GET | `/leaderboard` | opt | this quarter's standings + career; best cash-out in the last 24h. `?friends=1` (signed in) scopes both to your friends and you |
+| GET | `/friends` | ✓ | your friends with quarter/career headcount, streak, rank, town mood; `added_you` = how many players added you |
+| POST | `/friends/add` | ✓ | `{ username }` — one-directional; cap 50 |
+| POST | `/friends/remove` | ✓ | `{ username }` |
+| GET | `/players/:username` | opt | a player's public sheet: open positions with live values, headcounts, rank, cash in play, favourite charity, town summary, `is_friend` / `added_you` for the viewer |
 
-Auth is a Bearer JWT in the `Authorization` header. Tokens last 180 days.
+| POST | `/auth/google` | | `{ credential }` — sign in or up with a Google ID token |
+| POST | `/auth/link-google` | ✓ | `{ credential }` — attach Google to the signed-in account (claims a guest) |
+| POST | `/auth/password` | ✓ | `{ current?, password }` — set/change password; signs out other devices |
+| POST | `/auth/username` | ✓ | `{ username }` |
+| POST | `/auth/logout-all` | ✓ | invalidate every token for this account |
+| GET | `/auth/options` | | whether Google sign-in is on, and the client id |
+
+Auth is a Bearer JWT (HS256) in the `Authorization` header. Tokens last 180
+days and carry the account's `token_version`; a password change or
+"sign out everywhere" bumps it, so older tokens stop working immediately.
+
+## Security
+
+- Passwords: bcrypt, cost 12. Minimum 8 characters, not the username, not a
+  one-character repeat, not on a short list of the most common passwords.
+- Login runs the bcrypt comparison even when the username doesn't exist (against
+  a dummy hash), and returns the same message either way, so neither timing nor
+  wording reveals which usernames are taken. Usernames are unique ignoring case.
+- Rate limits (per IP, in memory): 20 logins / 15 min (and 10 per username),
+  10 new accounts / hour, 10 guest accounts / hour, 10 sensitive changes / 15
+  min, 30 friend-adds / 15 min, 60 trades / min, 120 reads (`/quote`,
+  `/players`) / min. One dyno; move the store to Redis if you scale out.
+- Tokens slide: `/me` returns a fresh `token` once the current one is past
+  half its 180 days, so a guest who keeps playing is never signed out of an
+  account they can't sign back into. `token_version` still revokes.
+- Finnhub calls are budgeted (`FINNHUB_BUDGET`, 50/min of their free 60), so a
+  burst degrades to stale quotes instead of a 429 that stalls the maturer.
+  `/buy` and `/ride` refuse a stale quote; collecting never needs one.
+- In production the server also refuses to start with `GOOGLE_CERTS_URL`,
+  `FINNHUB_URL` or `COINGECKO_URL` set (test hooks).
+- Google: ID tokens are verified against Google's JWKS (RS256 by `kid`),
+  issuer, audience and expiry, with no library in between. Accounts key on
+  `sub`. Linking requires being signed in; nothing is matched by email.
+- Headers: `nosniff`, `no-referrer`, `no-store`, `DENY` framing, HSTS in
+  production. CORS is locked to `CORS_ORIGIN`. Bodies are capped at 16 KB.
+- The server refuses to boot in production with a weak `JWT_SECRET` or
+  `CORS_ORIGIN=*`.
+- The front end keeps the token in `localStorage` and sends it as a Bearer
+  header (no cookies, so no CSRF). Every piece of user-supplied text is
+  escaped before it's rendered.
+- Friends and player sheets expose only what the leaderboards already show
+  plus play-money game state (open positions, town mood). Never email, never
+  Google ids, never anything from Account. Adding is one-way and silent.
+- Guest accounts that never hired anyone and haven't been seen for
+  `GUEST_TTL_DAYS` (45) are deleted once a day (`src/housekeeping.js`), with
+  their positions, so abandoned guests don't pile up.
+- Plain `http://` is refused in production (Heroku's `x-forwarded-proto`).
+- Not done: email/password reset (there's no email), 2FA, CAPTCHA. For a game
+  with no real money in player accounts, that's a reasonable place to stop.
 
 ## Prices
 
@@ -114,6 +192,7 @@ cp .env.example .env     # edit DATABASE_URL at minimum
 npm install
 npm start                # migrates on boot, listens on :3000
 npm run smoke            # exercises the whole loop against localhost:3000
+npm test                 # deck + town rules invariants (no server, no database)
 ```
 
 `src/migrate.js` creates tables if missing and upserts the charity list, and
@@ -143,14 +222,25 @@ non-localhost `DATABASE_URL`.
 src/server.js     express app, CORS, boot-time migrate
 src/routes.js     every endpoint
 src/game.js       the rules as pure functions (day keys, multiplier ramp, value, tax, tiers, ranks)
-src/maturer.js    freezes positions at maturity (timer + lazy)
+src/maturer.js    freezes positions at maturity (scheduler one-off, timer, lazy), late-freeze backstop
+src/pricelog.js   a week of every quote the game fetched, for late freezes
+scripts/mature.js the Heroku Scheduler job: freeze everything due, exit
 src/prices.js     Finnhub / CoinGecko / mock, with a cache
 src/assets.js     the curated tradable list
 src/charities.js  the curated charity list (seeded into the DB)
-src/auth.js       bcrypt + JWT helpers, requireUser middleware
+src/auth.js       bcrypt + JWT helpers, password policy, requireUser, security headers
+src/google.js     Google ID token verification (JWKS, no deps)
+src/ratelimit.js  in-memory per-IP limiter
+src/housekeeping.js  daily sweep of abandoned guest accounts
+REVIEW.md         the October 2026 critical review: what was found, what changed, what's left
+src/town.js       TrickleTown rules + the card deck (byte-identical to the front end's js/town.js)
 src/db.js         pg pool + transaction helper
 src/migrate.js    schema + seed
-scripts/smoke.sh  end-to-end check
+scripts/smoke.sh  end-to-end check against a running server
+scripts/test-town.js  deck and rules invariants, no server needed (npm test)
+scripts/check-prices.js  verify the live price feed with your keys
+app.json          Heroku app manifest (addons + env prompts)
+DEPLOY.md         step-by-step go-live
 ```
 
 ## Before real money moves
@@ -167,8 +257,8 @@ Things the demo deliberately leaves out:
 - **Legal.** Several US states regulate "commercial co-ventures" (businesses
   advertising that activity benefits a charity). Worth a short conversation
   with someone who knows before the first real payout. Not legal advice.
-- **Abuse.** No rate limiting, no CAPTCHA on guest creation. Add
-  `express-rate-limit` on `/auth/*` and `/buy` before announcing it anywhere big.
+- **Abuse.** Rate limits exist (see Security). Add a CAPTCHA on guest
+  creation if bots show up.
 - **Ads.** The footer has a labelled placeholder slot.
 
 ## Roadmap (ideas from the design sessions, not built)
@@ -183,4 +273,6 @@ Things the demo deliberately leaves out:
   not touch the leaderboards. Keep it strictly play money and purely cosmetic
   to the charity math, or it drifts toward gambling-adjacent territory.
 - **Streak freeze** — one missed day forgiven per month, Duolingo-style.
-- **Friends boards** — leaderboard filtered to people you follow.
+- **Mutual friends / nudges** — friends are one-way on purpose (no
+  notifications to build, nothing to moderate). A "they added you back"
+  badge is the cheap next step.
