@@ -49,6 +49,20 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
   are fictional and nothing real is moving. The seed list in `src/charities.js`
   is deliberately made up for that reason.
 
+## TrickleTown
+
+`src/town.js` is the village: two plots (housing, town square), each with a
+bad / compromise / good building and two upgrades per building; a deck of
+cards Preston and Dolores bring two of a day (one everyone gets, one from
+whatever the player's town has unlocked: a building, an upgrade, a career
+headcount, cash on the coin at dawn, or happiness/health below a threshold);
+and the four numbers they push: daily income (added to the allowance),
+happiness (sets the recruiter's rate per lobbyist), health (below 40,
+lobbyists quit overnight), and one-time cash. The town opens once the player
+has hired one full lobbyist. The file is pure rules and is byte-identical to
+the front end's `js/town.js`; edit one, copy to the other. `/me` returns the
+whole view (`town`), including every card's unlock status for the deck grid.
+
 ## Endpoints
 
 | Method | Path | Auth | What |
@@ -67,6 +81,9 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
 | POST | `/sell` | ✓ | `{ position_id, charity_id }` — collects a matured position in full, or sells a live one early (charity required only when there's a profit) |
 | POST | `/ride` | ✓ | `{ position_id }` — let a matured position ride: its frozen value becomes a fresh 24h position in the same asset at today's price, untaxed |
 | GET | `/trickle` | | per-charity shares this quarter + all time |
+| POST | `/town/decide` | ✓ | `{ issue_id, side }` — play one of today's cards with Preston's or Dolores's answer; returns the real `fx` |
+| POST | `/town/build` | ✓ | `{ slot, key }` — put a building on a plot ($40); replacing one clears its upgrades |
+| POST | `/town/upgrade` | ✓ | `{ slot, key }` — buy an upgrade for the building on a plot |
 | GET | `/leaderboard` | | all-time donations; best lock-in in the last 24h |
 
 Auth is a Bearer JWT in the `Authorization` header. Tokens last 180 days.
