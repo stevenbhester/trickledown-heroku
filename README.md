@@ -83,21 +83,22 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
 
 ## TrickleTown
 
-`src/town.js` is the village: two plots (housing, town square), each with a
-bad / compromise / good building and two upgrades per building; a deck of
-cards Preston and Dolores bring two of a day (one everyone gets, one from
-whatever the player's town has unlocked: a building, an upgrade, a career
-headcount, cash on the coin at dawn, friends, a streak, a flag set by an
-earlier card, or happiness/health past a threshold). Unplayed cards come
-first; a follow-up you've answered doesn't come back, and emergent ones (a
-strike, the flu, a magazine profile of a thriving town) return no more than
-weekly. 77 cards as of this writing;
-and the four numbers they push: daily income (added to the allowance),
-happiness (sets the recruiter's rate per lobbyist, $1.25 to 75¢), health (below 50,
-lobbyists quit overnight), and one-time cash. The town opens once the player
-has hired one full lobbyist. The file is pure rules and is byte-identical to
-the front end's `js/town.js`; edit one, copy to the other. `/me` returns the
-whole view (`town`), including every card's unlock status for the deck grid.
+`src/town.js` is the village: two plots (housing, town square), each with an
+extractive / compromise / decent building and two upgrades per building, and
+two scores: **profit** (dollars a day added to, or taken from, the allowance)
+and **happiness** (0–100; sets the lobbyist price, $1.4K a head at 0 to $500
+at 100, and drifts back toward 55). Cards push those two plus one-time cash.
+Every day Preston and Dolores bring a headline everyone gets plus at least two
+cards from whatever the player's town has unlocked (a building, an upgrade, a
+career headcount, cash on the coin at dawn, friends, a streak, days played, a
+flag set by an earlier card, or happiness past a threshold), or half the
+unplayed backlog if that's more (max 6). A card unlocked during the day by an
+action joins today's agenda. A choice that leads to a follow-up is tagged with
+how that tends to go (`later`: good / bad / mixed). 77 cards as of this
+writing. The town opens once the player has hired one full lobbyist. The file
+is pure rules and is byte-identical to the front end's `js/town.js`; edit one,
+copy to the other. `/me` returns the whole view (`town`), including every
+card's unlock status for the deck grid.
 
 ## Endpoints
 
@@ -114,16 +115,19 @@ whole view (`town`), including every card's unlock status for the deck grid.
 | POST | `/auth/register` | | username + password |
 | POST | `/auth/login` | | username + password |
 | POST | `/auth/claim` | ✓ | give a guest account a username + password |
-| GET | `/me` | ✓ | grants today's money if due; portfolio with live values, history, today's crowd picks |
+| GET | `/me` | ✓ | grants today's money if due (allowance plus the town's profit); portfolio with live values, history, today's crowd picks; `achievements` (earned/claimed/progress, newly earned ones recorded here); `fresh_cards`: titles of cards that unlocked since the last look and were added to today's agenda |
 | POST | `/buy` | ✓ | `{ symbol, amount }` |
-| POST | `/vest` | ✓ | `{ charity_id? }` — day one's windfall, once per account: after the first buy, `VEST_AMOUNT` (40) of pure profit from "vested shares", taxed like any win, so the first lobbyists are hired and TrickleTown opens without waiting 24h. Offered on `/me` as `vesting.available` |
-| POST | `/sell` | ✓ | `{ position_id, charity_id }` — collects a matured position in full, or sells a live one early (charity required only when there's a profit) |
+| GET | `/achievements` | ✓ | the trophy case: every achievement with gift, giver, earned/claimed dates and progress; records anything newly earned |
+| POST | `/achievements/claim` | ✓ | `{ key, charity_id? }` — take an earned achievement's gift from Mommy & Daddy: pure profit, taxed like any win, so it hires lobbyists (`charity_id` only matters before the player has a default). Recorded as a closed `gift` position |
+| POST | `/vest` | ✓ | older clients: same as claiming `first_buy` (the day-one gift, `VEST_AMOUNT`) |
+| POST | `/sell` | ✓ | `{ position_id, charity_id? }` — collects a matured position in full, or sells a live one early. `charity_id` (here, on `/vest` and on `/ride`) only matters when the player has no default charity yet: it becomes the default. With a default set, new lobbyists always go there |
 | POST | `/ride` | ✓ | `{ position_id, charity_id? }` — let a matured position ride: profit taxed at half rate now (the other half deferred), the rest becomes a fresh 24h position in the same asset at today's price with the multiplier climbing from where it ended |
 | GET | `/trickle` | | per-charity shares this quarter + all time |
 | POST | `/town/decide` | ✓ | `{ issue_id, side }` — play one of today's cards with Preston's or Dolores's answer; returns the real `fx` and `crowd` (how everyone else answered it today) |
 | POST | `/town/build` | ✓ | `{ slot, key }` — put a building on a plot ($40); replacing one clears its upgrades |
 | POST | `/town/upgrade` | ✓ | `{ slot, key }` — buy an upgrade for the building on a plot |
-| GET | `/leaderboard` | opt | this quarter's standings + career; best cash-out in the last 24h. `?friends=1` (signed in) scopes both to your friends and you |
+| GET | `/leaderboard` | opt | this quarter's standings + career; best cash-out in the last 24h; `biggest`: the 25 largest open positions by current value (priced from quotes the game already has, no provider calls). `?friends=1` (signed in) scopes all three to your friends and you |
+| POST | `/lobbyists/assign` | yes | `{ allocation?: [{ charity_id, amount }], default_charity_id? }` — move this quarter's lobbyists between charities (the allocation must account for every one) and/or change the default charity new hires go to |
 | GET | `/friends` | ✓ | your friends with quarter/career headcount, streak, rank, town mood; `added_you` = how many players added you |
 | POST | `/friends/add` | ✓ | `{ username }` — one-directional; cap 50 |
 | POST | `/friends/remove` | ✓ | `{ username }` |
@@ -139,7 +143,7 @@ whole view (`town`), including every card's unlock status for the deck grid.
 | POST | `/admin/grant` | admin | `{ cash?, lobbyists?, username?, charity_id? }` — testing: real rows, so boards and town see them |
 | POST | `/admin/reset` | admin | `{ username? }` — a brand-new account: no positions, lobbyists, town, friends on their list, streak or device codes; shares unvested; $100 on the next `/me`. Username and sign-ins stay |
 | POST | `/admin/unlock` | admin | `{ issue_id \| issue_ids \| all: true, username? }` — open cards early; they go in the pile for future days |
-| POST | `/admin/deal` | admin | `{ issue_id, username? }` — put a card on today's agenda now (town must be open and started today) |
+| POST | `/admin/deal` | admin | `{ issue_id \| all: true, username? }` — put a card (or every unlocked card) on today's agenda now (town must be open and started today) |
 | GET | `/auth/options` | | whether Google sign-in is on, and the client id |
 
 Auth is a Bearer JWT (HS256) in the `Authorization` header. Tokens last 180

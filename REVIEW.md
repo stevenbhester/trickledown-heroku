@@ -417,6 +417,157 @@ at a player you name:
 - Admin calls have their own rate limit (120 per 15 minutes) instead of
   sharing the one that guards password changes.
 
+## TrickleTown layout pass
+
+- Each town section is its own panel with an icon and a quiet identity:
+  Vitals (clinic chart), Town Hall (civic stone), Construction zone
+  (hazard tape over a site-plan grid), the deck (card-table felt), Payroll
+  (warm paper), Rank (a staff ID badge).
+- Town Hall and the Site Office pin a stat bar to the top: Cash, Allowance,
+  Happiness, Health, Lobbyist price. After a choice each stat that moved
+  shows by how much. Card choices say "Costs $15K" or "Free".
+- Building options lead with the name and a large price; short of cash the
+  button says how much more is needed.
+- After building, a "built" screen with Back to TrickleTown. The office's
+  main button is Back to TrickleTown; tearing down is a small link.
+- "Hiring cost" is now "Lobbyist price" everywhere it shows.
+- **Purchase grace** (`town.js` `canPay`, `GRACE` = $0.1K): money shows to
+  one decimal, so $29.97K reads as "$30K". Anything within a display step
+  of a price counts as enough, and the purchase takes what's there (cash
+  never goes negative). Same rule on both sides, so "$30K" on the coin
+  always buys a $30K building.
+
+## Default charity, Assign lobbyists, and the biggest-positions board
+
+- **One pick, at the first cash-out.** `users.charity_id` is now the
+  player's default. The first time lobbyists are hired (usually the vesting
+  memo) the sheet asks "Pick your charity" and the button waits for an
+  answer. After that every cash-out just says where the lobbyists are going.
+  The server never overwrites a default from a sale (`COALESCE(charity_id,
+  chosen)`), and with a default set it wins over whatever a client sends.
+- **Assign lobbyists** (bottom of TrickleTown, in Payroll, which is now the
+  last panel): move this quarter's lobbyists between charities with − / + /
+  "All here", and pick the default for new hires. Moves are recorded as
+  +/- donation rows with no position, like quitting, so every total stays a
+  SUM; the server checks the allocation accounts for every lobbyist this
+  quarter. Past quarters already marched and can't be rearranged.
+- `/trickle` counts a charity's donors as players with lobbyists there now,
+  not anyone who ever had a row (moves and quitting made that wrong).
+- **Biggest positions right now** on the Leaders page: open positions by
+  current value, with the friends filter. Priced from this process's last
+  good quote or the price log, so a board view never calls a provider.
+- A vesting memo that was closed before selling now shows up as a to-do
+  ("Your shares vested. Sell them for $40K"); before, it could only open
+  right after a buy.
+
+## Achievements, a fairer deck, and money-or-people buildings
+
+**Achievements** (`src/achievements.js`, table `achievements`). Eleven rare
+milestones, each with a one-time gift from Mommy & Daddy, taxed like any win
+so it hires lobbyists: Skin in the Game (first buy, $40K, the old vesting
+amount and the only one on day one), Realized Gains, Character Building
+(lose a whole position), Networking (3 friends), Creature of Habit (7-day
+streak), Landlord (every lot built), Let It Ride (ride twice), Legendary,
+Power Broker (50 lobbyists), Clocked In (30-day streak), Seven Figures ($1M
+on the coin). Earned automatically on `/me` / `GET /achievements`, claimed
+from a popup (burst, a handwritten note, the tax receipt). A dismissed one
+stays in the to-do strip; the 🏆 in the masthead (with a count, and a nudge
+when a gift is waiting) and the staff ID in TrickleTown open the trophy case
+with progress bars. Old "vested" accounts were backfilled as having claimed
+the first one. The onboarding now calls it what it is: a bonus.
+
+**Onboarding copy.** "Hold 24 hours for ×10" says the multiplier works on
+the move: a stock up 1% puts you up 10% at 24 hours; down 1%, down 10%.
+
+**Popups.** Darker, blurred backdrop; the page behind a popup is frozen
+(body pinned at its scroll offset, released on close). Tapping a building on
+the coin opens its Site Office (it used to flip the coin back); tapping an
+advisor opens Town Hall. A built lot's office now has labeled sections:
+what it does every day, and every upgrade with its price, numbers and why
+it's locked (with your progress).
+
+**Balance: money or people.** Decent buildings now attract volunteers:
+free lobbyists every night for the default charity (Co-op 0.5, Clinic 0.6,
+Pinnacle 0.1; decent upgrades 0.15–0.2), scaled by happiness (×0.5 to
+×1.5). Extractive buildings keep their big allowance. The 45-day model in
+`npm test`: extract earns ~$2.8M extra allowance and ends the quarter with
+~6 lobbyists (quitting eats them); mixed ~$1.8M and ~83; nice −$0.8M and
+~160, about 72 of them volunteers. The Pinnacle's health cost went from −2
+to −1 so the compromise town doesn't bleed. Each building unlocks its own
+card; cards aren't stronger for decent buildings, and the copy says so.
+
+**Every card choice has an upside.** 19 of Preston's sides were pure loss
+(e.g. "Lobby the reporter": −$15K, −happiness). Each now pays something
+visible (cash or allowance) for its cost in people. `npm test` checks it.
+
+**More cards a day.** One headline plus at least two town cards, or half
+the unplayed backlog if that's more (max 6). A card unlocked during the day
+by an action (building, upgrade, hires, friends) joins today's agenda right
+away (`dealNewUnlocks`, baseline `town.unlock_seen`); days-played, cash at
+dawn, streak, follow-up and "happens when" cards still arrive with the
+daily deal. Admin can deal every unlocked card at once.
+
+## Two scores: profit and happiness
+
+Testers found the town convoluted: happiness, health, quitting, volunteers,
+a recruiter's rate. Now there are two scores and one thing each does:
+
+- **Profit**: dollars a day the village adds to (or takes from) the
+  allowance. Extractive buildings make it; decent ones cost it.
+- **Happiness**: sets the lobbyist price, $1.4K a head at 0, about $1K at
+  55, $500 at 100. The top of the scale is worth the most, so a properly
+  decent town really is cheaper to staff. Drifts back toward 55.
+
+Health, quitting and volunteers are gone. Building and card effects that
+were on health folded into happiness; the cards gated on health now gate on
+happiness (the inspector, "nobody calls in sick") or on days played (the
+flu). Old saves drop the field.
+
+The 45-day model in `npm test` (the day's money invested, about 1.7% of it
+coming back as tax, hired at the town's price): extractive earns about $2.8M
+of extra allowance and hires ~118 lobbyists; compromise ~$1.8M and ~145;
+decent −$0.8M and ~200. Money or people, with the middle in the middle. The
+compromise buildings went to −1 and −2 happiness to keep it there.
+
+A card choice that leads to a follow-up now says how that tends to go:
+"✨ Could pay off later", "⚠️ Could come back to bite", or "🔮 Something
+comes of this later" (`town.js` LATER, checked by `npm test`).
+
+## The simplification pass
+
+Testers said the game was hard to grasp. Nothing in the rules changed; the
+screens and the words did.
+
+**Navigation.** The hidden heads/tails flip is now a labelled switch under
+the coin: Portfolio | TrickleTown, with a badge for cards waiting and a lock
+until the town opens. The coin still flips (and tapping it still works), but
+nobody has to know what "tails" means. The surprise auto-flip-back after a
+collect is gone; after a hire you stay in town and the switch takes you back.
+
+**Today.** Portfolio header is one line. The buy box is a search field and
+a button. Position rows are two lines plus a 24-hour progress bar instead of
+three lines of prose. The crowd line is one line. Phone height 1760 → 1576
+for the same state.
+
+**TrickleTown.** Seven panels became four: the scores strip (profit,
+happiness, lobbyist price, lobbyists this quarter; the same component the
+dialogs use), Town Hall, Construction zone, Payroll (with rank and records
+folded in). The 77-card deck moved into a sheet behind one line ("10 of 77
+cards unlocked · 1 more tomorrow"). The staff-ID badge and the Vitals panel
+are gone; the overnight report is one line. Phone height 3439 → 2161.
+
+**Tutorials.** Employee training: 7 slides → 4 (fake money/real charity;
+hold 24h for ×10 on the move; wins hire lobbyists, most lobbyists wins
+Lobbyfest; your first buy pays a bonus). TrickleTown tour: 7 → 3 (two
+scores; money or people; cards every day). Jokes stay in the fine print and
+on the cards; the instructional lines are plain.
+
+**How page.** 4800px of chapters → 14 short questions in an accordion, the
+first one open. Lobby page: three numbers and the list. Leaders: ten rows a
+board, "Show N more". Sell sheet: five receipt lines, not nine.
+
+Everything a player could do before, they can still do, in the same places.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored
