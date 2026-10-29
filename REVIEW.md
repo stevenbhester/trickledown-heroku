@@ -568,6 +568,24 @@ board, "Show N more". Sell sheet: five receipt lines, not nine.
 
 Everything a player could do before, they can still do, in the same places.
 
+## "No achievement on my first buy"
+
+Cause: the live server was several releases behind the page. GitHub showed
+`src/routes.js` last updated before achievements existed, and
+`src/achievements.js` was never uploaded (the page's own scripts had landed
+in `src/` instead). So `/me` had no `achievements`, and the page, which only
+read `achievements`, showed no guide, no popup and no gift. With a matching
+server the flow worked end to end.
+
+Fixes, so a half-finished deploy can't look like a bug again:
+- `/health` and `/me` report `api: 8`. The page expects 8. If the server is
+  older, admins get a yellow bar saying so; everyone gets a console warning.
+- Against an older server, the page reads the old `vesting` field as the
+  first achievement and claims it through `/vest`. Tested against the code
+  that is actually on GitHub: the gift pops, pays $40K, hires lobbyists.
+- `index.html` loads its scripts and stylesheet with `?v=…`, so a cached
+  page can't mix an old `index.html` with new scripts. Bump it each release.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

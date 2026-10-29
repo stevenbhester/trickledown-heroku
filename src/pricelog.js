@@ -38,4 +38,15 @@ async function prune() {
   return rowCount;
 }
 
-module.exports = { record, nearest, prune, KEEP_DAYS };
+// The most recent logged price for each symbol: { symbol: { price, at } }.
+async function latest(symbols) {
+  const list = [...new Set(symbols)].filter(Boolean);
+  if (!list.length) return {};
+  const { rows } = await query(
+    `SELECT DISTINCT ON (symbol) symbol, price, at FROM price_log
+      WHERE symbol IN (SELECT jsonb_array_elements_text($1::jsonb)) ORDER BY symbol, at DESC`, [JSON.stringify(list)],
+  );
+  return Object.fromEntries(rows.map((r) => [r.symbol, { price: Number(r.price), at: r.at }]));
+}
+
+module.exports = { record, nearest, latest, prune, KEEP_DAYS };

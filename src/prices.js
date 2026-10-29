@@ -169,4 +169,11 @@ async function getQuote(asset) {
   return q;
 }
 
-module.exports = { getQuote, getQuotes };
+// The last good quote this process has seen for a symbol, without calling a
+// provider. For boards that rank many players' positions at once.
+function peek(symbol) {
+  const q = lastGood.get(symbol);
+  return q && q.price > 0 ? { price: q.price, at: q.at || null } : null;
+}
+
+module.exports = { getQuote, getQuotes, peek };

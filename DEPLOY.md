@@ -103,6 +103,22 @@ Replace `src/charities.js` with vetted organizations, redeploy, and set
 `DEMO_MODE=false`. Rows are upserted by slug and anything removed is retired,
 so history is kept. See the README's "Before real money moves" list first.
 
+## Did the deploy take?
+
+The page and the server ship separately, so it's easy to update one and not
+the other. Open `https://<your-app>.herokuapp.com/health` in a browser. It
+should say `"api":8` (the number in `API_VERSION` in `src/routes.js`). No
+`api`, or a lower number, means the server is older than the page: upload
+the whole backend again (every file in `src/`, including any new ones) and let
+Heroku redeploy. Signed in as an admin, the page also says so in a yellow bar
+at the bottom.
+
+Uploading through GitHub's "Add files via upload": open the repo's top level,
+not `src/`, and drag in the folders, so `src/achievements.js` lands at
+`src/achievements.js`. The page's files (`app.js`, `api.js`, `coin.js`,
+`demo-api.js`, `explainer.js`) don't belong in this repo; the server never
+loads them.
+
 ## Day to day
 
 - **Nothing accrues without a player.** Money lands only on days the player

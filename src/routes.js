@@ -8,6 +8,7 @@ const auth = require('./auth');
 const maturer = require('./maturer');
 const Town = require('./town');
 const pricelog = require('./pricelog');
+const achievements = require('./achievements');
 const google = require('./google');
 const { limit } = require('./ratelimit');
 
@@ -32,8 +33,8 @@ const RL = {
 // What the town rules need to know about the player.
 const townCtx = (u, extra = {}) => ({ uid: u.id, cash: u.cash, lobbyists: u.total_donated, streak: u.streak, friends: u.friend_count || 0, unlocked: Town.isUnlocked(u.total_donated), ...extra });
 
-async function friendCount(userId) {
-  const { rows: [r] } = await query('SELECT COUNT(*)::int AS n FROM friends WHERE user_id = $1', [userId]);
+async function friendCount(userId, db = { query }) {
+  const { rows: [r] } = await db.query('SELECT COUNT(*)::int AS n FROM friends WHERE user_id = $1', [userId]);
   return r.n;
 }
 const townView = (u) => ({ ...Town.view(u.town || Town.fresh(), townCtx(u, { day: game.dayKey() })), unlocked: Town.isUnlocked(u.total_donated) });
@@ -61,39 +62,38 @@ function publicUser(u) {
   };
 }
 
-// The charity for a tax: what the client asked for, else the one the player
-// has hired the most for, then their last pick, then the first on the list.
-// Never refuses to close a position over a missing pick.
+// The charity new lobbyists go to. users.charity_id is the player's default:
+// picked once, at their first cash-out, and changed only from TrickleTown
+// (POST /lobbyists/assign). With a default set, it always wins. Without one,
+// the client's pick (the first-cash-out picker), else the charity they've
+// hired the most for, else the first on the list. Never refuses to close a
+// position over a missing pick. The callers save the result as the default
+// when there wasn't one (COALESCE(charity_id, chosen)).
 async function pickCharity(user, charityId) {
   const { rows } = await query(
     `SELECT c.* FROM charities c
       LEFT JOIN (SELECT charity_id, SUM(amount) AS total FROM donations WHERE user_id = $2 GROUP BY charity_id) d ON d.charity_id = c.id
      WHERE c.active
-     ORDER BY (c.id = $1) DESC, (c.id = $3) DESC, d.total DESC NULLS LAST, c.sort
+     ORDER BY (c.id = $3) DESC, (c.id = $1) DESC, d.total DESC NULLS LAST, c.sort
      LIMIT 1`,
     [Number.isInteger(charityId) ? charityId : -1, user.id, user.charity_id || -1],
   );
   return rows[0] || null;
 }
 
-// Unhealthy lobbyists quit overnight. They leave this quarter's payroll in
-// proportion to where they were hired, recorded as negative donations so
-// every total stays a plain SUM. Returns how many quit.
-async function applyQuitting(user, quarter, rate, db = { query }) {
+// This quarter's lobbyists by charity (the ones headed to Lobbyfest), plus
+// the all-time picture. Shared by /me and /lobbyists/assign.
+async function charitySplit(userId, quarter, db = { query }) {
   const { rows } = await db.query(
-    `SELECT charity_id, SUM(amount)::float8 AS n FROM donations
-      WHERE user_id = $1 AND quarter = $2 GROUP BY charity_id HAVING SUM(amount) > 0`,
-    [user.id, quarter],
+    `SELECT c.id, c.name, c.slug,
+            GREATEST(0, COALESCE(SUM(d.amount) FILTER (WHERE d.quarter = $2), 0))::float8 AS amount,
+            COUNT(*) FILTER (WHERE d.quarter = $2 AND d.amount > 0 AND d.position_id IS NOT NULL)::int AS times,
+            SUM(d.amount)::float8 AS all_time
+       FROM donations d JOIN charities c ON c.id = d.charity_id
+      WHERE d.user_id = $1 GROUP BY c.id ORDER BY amount DESC, all_time DESC`,
+    [userId, quarter],
   );
-  let quit = 0;
-  for (const r of rows) {
-    const lost = game.round2(r.n * rate);
-    if (lost <= 0) continue;
-    await db.query('INSERT INTO donations (user_id, charity_id, amount, quarter) VALUES ($1, $2, $3, $4)', [user.id, r.charity_id, -lost, quarter]);
-    quit = game.round2(quit + lost);
-  }
-  // Career totals (users.total_donated, ranks) keep counting everyone you ever hired.
-  return quit;
+  return rows.map((r) => ({ ...r, amount: game.round2(r.amount) }));
 }
 
 // A position as the client sees it. Matured ones use their frozen price;
@@ -146,7 +146,12 @@ function dayInfo(now = new Date()) {
 
 // --- Meta ----------------------------------------------------------------------
 
-router.get('/health', (req, res) => res.json({ ok: true, provider: cfg.priceProvider, google: google.enabled(), demo: cfg.demoMode }));
+// The page checks this so a half-finished deploy (new page, old server) is
+// caught on sight instead of showing up as missing features. Bump it with any
+// release the page depends on; js/app.js API_WANTS must match.
+const API_VERSION = 8;
+
+router.get('/health', (req, res) => res.json({ ok: true, api: API_VERSION, provider: cfg.priceProvider, google: google.enabled(), demo: cfg.demoMode }));
 
 router.get('/config', (req, res) => {
   res.json({
@@ -429,7 +434,7 @@ router.post('/admin/grant', auth.requireUser, requireAdmin, RL.admin, wrap(async
       await tx.query('INSERT INTO donations (user_id, charity_id, amount, quarter) VALUES ($1, $2, $3, $4)', [target.id, charity.id, lobbyists, day.quarter]);
     }
     const { rows: [u] } = await tx.query(
-      'UPDATE users SET cash = cash + $1, total_donated = total_donated + $2, charity_id = COALESCE($3, charity_id) WHERE id = $4 RETURNING *',
+      'UPDATE users SET cash = cash + $1, total_donated = total_donated + $2, charity_id = COALESCE(charity_id, $3) WHERE id = $4 RETURNING *',
       [cash, lobbyists, charity ? charity.id : null, target.id],
     );
     return u;
@@ -447,6 +452,7 @@ router.post('/admin/reset', auth.requireUser, requireAdmin, RL.admin, wrap(async
   if (!target) return res.status(404).json({ error: 'No player by that name.' });
   await withTx(async (tx) => {
     await tx.query('DELETE FROM donations WHERE user_id = $1', [target.id]);
+    await tx.query('DELETE FROM achievements WHERE user_id = $1', [target.id]);
     await tx.query('DELETE FROM positions WHERE user_id = $1', [target.id]);
     await tx.query('DELETE FROM friends WHERE user_id = $1', [target.id]);
     await tx.query('DELETE FROM link_codes WHERE user_id = $1', [target.id]);
@@ -470,6 +476,7 @@ async function adminTown(req, res, act) {
   const today = game.dayKey();
   const result = await withTx(async (tx) => {
     const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [target.id]);
+    u.friend_count = await friendCount(u.id, tx);
     const town = u.town || Town.fresh();
     const r = act(town, u, today);
     if (r.error) return r;
@@ -497,17 +504,20 @@ router.post('/admin/unlock', auth.requireUser, requireAdmin, RL.admin, wrap(asyn
 }));
 
 router.post('/admin/deal', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const all = (req.body || {}).all === true;
   const [id] = cardIds((req.body || {}).issue_id);
-  if (!id) return res.status(400).json({ error: 'Pick a card.' });
+  if (!all && !id) return res.status(400).json({ error: 'Pick a card, or send all: true.' });
   const out = await adminTown(req, res, (town, u, today) => {
     if (!Town.isUnlocked(u.total_donated)) return { error: "TrickleTown isn't open for this player yet: they need a lobbyist first (grant one)." };
     if (town.day !== today) return { error: "This player's town hasn't started today yet. Open the game as them first." };
-    Town.ensureIssues(town, townCtx(u, { day: today })); // today's own cards first, if the town only just opened
+    const ctxNow = townCtx(u, { day: today });
+    Town.ensureIssues(town, ctxNow); // today's own cards first, if the town only just opened
+    if (all) { const ids = Town.dealAllUnlocked(town, ctxNow); return ids.length ? { dealt: ids } : { error: 'Every unlocked card is already on the agenda.' }; }
     return Town.deal(town, id);
   });
   if (!out) return;
-  console.log(`[admin] ${req.user.username} dealt ${id} to ${out.target.username}`);
-  res.json({ ok: true, dealt: id, user: publicUser(out.user), town: townView(out.user) });
+  console.log(`[admin] ${req.user.username} dealt ${all ? `${out.r.dealt.length} cards` : id} to ${out.target.username}`);
+  res.json({ ok: true, dealt: out.r.dealt, user: publicUser(out.user), town: townView(out.user) });
 }));
 
 router.post('/auth/logout-all', auth.requireUser, wrap(async (req, res) => {
@@ -543,7 +553,6 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
       // Cash at dawn, for cards that need "$X on the coin": base stipend plus whatever the town pays.
       const { report } = Town.tick(town, townCtx(u, { day: day.key, streak, cash: u.cash + base + Town.income(town) }));
       const amount = game.round2(Math.min(cfg.dailyCap + cfg.townIncomeCap, Math.max(10, base + report.income)));
-      if (report.quit_rate > 0) report.quit = await applyQuitting(u, day.quarter, report.quit_rate, tx);
       const { rows: [updated] } = await tx.query(
         `UPDATE users SET cash = cash + $1, streak = $2, last_allowance_day = $3, last_seen_at = now(), town = $5
           WHERE id = $4 RETURNING *`,
@@ -559,8 +568,15 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
   }
 
   // Unlocked mid-day (first full lobbyist just hired)? Deal today's issues now.
-  if (user.town && Town.ensureIssues(user.town, townCtx(user, { day: day.key }))) {
-    await query('UPDATE users SET town = $1 WHERE id = $2', [user.town, user.id]);
+  // And a card unlocked since the last look (a hire, a friend) joins today.
+  let freshCards = [];
+  if (user.town) {
+    const ctxNow = townCtx(user, { day: day.key });
+    const opened = Town.ensureIssues(user.town, ctxNow);
+    freshCards = Town.dealNewUnlocks(user.town, ctxNow);
+    if (opened || freshCards.length || !Array.isArray(user.town.unlock_seen)) {
+      await query('UPDATE users SET town = $1 WHERE id = $2', [user.town, user.id]);
+    }
   }
 
   // Sliding sessions: a token past half its life is replaced, so a guest who
@@ -581,22 +597,22 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
 
   const { rows: history } = await query(
     `SELECT p.id, p.symbol, p.name, p.invested, p.proceeds, p.profit, p.tax, p.tier, p.closed_at, p.closed_day,
-            (p.matured_at IS NOT NULL) AS collected, (p.status = 'rolled') AS rode, (p.status = 'vested') AS vested, c.name AS charity_name,
+            (p.matured_at IS NOT NULL) AS collected, (p.status = 'rolled') AS rode, (p.status = 'vested') AS vested, (p.status = 'gift') AS gift, c.name AS charity_name,
             (SELECT SUM(d.amount) FROM donations d WHERE d.position_id = p.id)::float8 AS lobbyists
        FROM positions p LEFT JOIN charities c ON c.id = p.charity_id
-      WHERE p.user_id = $1 AND p.status IN ('closed', 'rolled', 'vested')
+      WHERE p.user_id = $1 AND p.status IN ('closed', 'rolled', 'vested', 'gift')
       ORDER BY p.closed_at DESC LIMIT 12`,
     [user.id],
   );
 
   const { rows: crowd } = await query(
     `SELECT symbol, name, COUNT(*)::int AS buys, SUM(invested)::float8 AS invested
-       FROM positions WHERE opened_day = $1 AND rolled_from IS NULL
+       FROM positions WHERE opened_day = $1 AND rolled_from IS NULL AND status NOT IN ('vested', 'gift')
       GROUP BY symbol, name ORDER BY buys DESC, invested DESC LIMIT 5`,
     [day.key],
   );
   const { rows: [crowdTotal] } = await query(
-    'SELECT COUNT(*)::int AS buys, COUNT(DISTINCT user_id)::int AS players FROM positions WHERE opened_day = $1 AND rolled_from IS NULL',
+    "SELECT COUNT(*)::int AS buys, COUNT(DISTINCT user_id)::int AS players FROM positions WHERE opened_day = $1 AND rolled_from IS NULL AND status NOT IN ('vested', 'gift')",
     [day.key],
   );
 
@@ -604,15 +620,16 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
   const { rows: friendsToday } = await query(
     `SELECT u.username, array_agg(DISTINCT p.symbol ORDER BY p.symbol) AS symbols
        FROM friends f JOIN users u ON u.id = f.friend_id
-       JOIN positions p ON p.user_id = u.id AND p.opened_day = $2 AND p.rolled_from IS NULL
+       JOIN positions p ON p.user_id = u.id AND p.opened_day = $2 AND p.rolled_from IS NULL AND p.status NOT IN ('vested', 'gift')
       WHERE f.user_id = $1 GROUP BY u.username ORDER BY u.username LIMIT 8`,
     [user.id, day.key],
   );
 
-  // Day one's windfall is offered once the player has bought something.
-  const vesting = cfg.vestAmount > 0 && !user.vested_at
-    ? { available: (await query('SELECT 1 FROM positions WHERE user_id = $1 LIMIT 1', [user.id])).rows.length > 0, amount: cfg.vestAmount }
-    : null;
+  // Achievements: anything newly earned is recorded here. `vesting` is the
+  // first one in the shape older clients expect.
+  const ach = await achievements.sync(user);
+  const firstBuy = ach.list.find((a) => a.key === 'first_buy');
+  const vesting = firstBuy && !firstBuy.claimed_at ? { available: !!firstBuy.earned_at, amount: firstBuy.gift } : null;
 
   const { rows: [todayGiven] } = await query(
     `SELECT COALESCE(SUM(d.amount), 0)::float8 AS amount FROM donations d
@@ -621,20 +638,12 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     [user.id, day.key],
   );
 
-  // The back of the coin: this quarter's lobbyists by charity (the ones headed
-  // to Lobbyfest), plus the all-time picture for prefills and context.
-  const { rows: byCharity } = await query(
-    `SELECT c.id, c.name, c.slug,
-            COALESCE(SUM(d.amount) FILTER (WHERE d.quarter = $2), 0)::float8 AS amount,
-            COUNT(*) FILTER (WHERE d.quarter = $2 AND d.amount > 0)::int AS times,
-            SUM(d.amount)::float8 AS all_time
-       FROM donations d JOIN charities c ON c.id = d.charity_id
-      WHERE d.user_id = $1 GROUP BY c.id ORDER BY amount DESC, all_time DESC`,
-    [user.id, day.quarter],
-  );
+  // The back of the coin: this quarter's lobbyists by charity.
+  const byCharity = await charitySplit(user.id, day.quarter);
   const quarterDonated = byCharity.reduce((s, c) => s + c.amount, 0);
 
   res.json({
+    api: API_VERSION,
     user: { ...publicUser(user), quarter_donated: game.round2(quarterDonated) },
     day,
     allowance,
@@ -647,6 +656,8 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     friend_count: user.friend_count,
     today_donated: todayGiven.amount,
     vesting,
+    achievements: ach,
+    fresh_cards: freshCards.map((id) => (Town.ISSUES.find((i) => i.id === id) || {}).title).filter(Boolean),
     token: renewedToken,
   });
 }));
@@ -733,7 +744,7 @@ router.post('/ride', auth.requireUser, RL.trade, wrap(async (req, res) => {
       [now, day, p.matured_price, p.matured_value, s.profit, s.tax, charity ? charity.id : null, s.tier, p.id],
     );
     const { rows: [u] } = await tx.query(
-      `UPDATE users SET total_donated = total_donated + $1, realized_pnl = realized_pnl + $2, charity_id = COALESCE($3, charity_id)
+      `UPDATE users SET total_donated = total_donated + $1, realized_pnl = realized_pnl + $2, charity_id = COALESCE(charity_id, $3)
        WHERE id = $4 RETURNING *`,
       [lobbyists, s.profit, charity ? charity.id : null, p.user_id],
     );
@@ -762,68 +773,92 @@ router.post('/ride', auth.requireUser, RL.trade, wrap(async (req, res) => {
   });
 }));
 
-// Day one's windfall: once the player has invested something, their shares
-// in Trickle Down Holdings "vest" and company policy says sell, today, for
-// VEST_AMOUNT of pure profit. Taxed like any win, so it hires their first
-// lobbyists and opens TrickleTown without waiting 24 hours for a real one.
-router.post('/vest', auth.requireUser, RL.trade, wrap(async (req, res) => {
-  if (!(cfg.vestAmount > 0)) return res.status(404).json({ error: 'Nothing to vest.' });
+// --- Achievements: rare milestones, each with a gift from Mommy & Daddy -------------
+//
+// Earned automatically (achievements.sync, run by /me and GET /achievements).
+// Claiming one is when the money moves: the gift is pure profit, taxed like
+// any win, so it hires lobbyists for the default charity (or, on a first
+// cash-out, the one picked). Recorded as a closed 'gift' position so it shows
+// in Records and the donation links to it.
+
+router.get('/achievements', auth.requireUser, RL.read, wrap(async (req, res) => {
+  res.json(await achievements.sync(req.user));
+}));
+
+async function claimGift(req, res, key) {
+  const a = achievements.BY_KEY.get(key);
+  if (!a) return res.status(404).json({ error: 'No such achievement.' });
+  await achievements.sync(req.user); // in case it was earned since the last look
   const charityId = Number((req.body || {}).charity_id);
   const now = new Date();
   const day = game.dayKey(now);
-  const amount = game.round2(cfg.vestAmount);
-  const s = game.settle({ invested: 0, value: amount });
   const hireCost = Town.hireCost(req.user.town || Town.fresh());
-  const lobbyists = game.round2(s.tax / hireCost);
   const charity = await pickCharity(req.user, charityId);
   if (!charity) return res.status(500).json({ error: 'No charities are set up yet.' });
 
   const result = await withTx(async (tx) => {
     const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
-    if (u.vested_at) return { error: 'Your shares already vested. Once per associate. Policy.' };
-    const { rows: bought } = await tx.query('SELECT 1 FROM positions WHERE user_id = $1 LIMIT 1', [u.id]);
-    if (!bought.length) return { error: 'Shares vest once you have invested something. Policy.' };
+    const { rows: [row] } = await tx.query('SELECT * FROM achievements WHERE user_id = $1 AND key = $2 FOR UPDATE', [u.id, key]);
+    if (!row) return { error: `Not yet: ${a.how}` };
+    if (row.claimed_at) return { error: 'Already in your pocket. Mommy and Daddy only pay once.' };
+    const amount = game.round2(row.gift != null ? Number(row.gift) : a.gift());
+    const s = game.settle({ invested: 0, value: amount });
+    const lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
     const { rows: [p] } = await tx.query(
       `INSERT INTO positions (user_id, symbol, name, asset_type, multiplier, mult_floor, invested, entry_price, opened_day, matures_at,
                               matured_at, matured_price, matured_value, origin_invested,
                               status, closed_at, closed_day, exit_price, proceeds, profit, tax, charity_id, tier)
-       VALUES ($1, 'TDH', 'Trickle Down Holdings', 'stock', 1, 1, 0, 0, $2, now(), now(), 0, $3, 0,
-               'vested', now(), $2, 0, $3, $4, $5, $6, 'Vested') RETURNING *`,
-      [u.id, day, amount, s.profit, s.tax, charity.id],
+       VALUES ($1, 'GIFT', $2, 'stock', 1, 1, 0, 0, $3, now(), now(), 0, $4, 0,
+               'gift', now(), $3, 0, $4, $5, $6, $7, 'Gift') RETURNING *`,
+      [u.id, a.title, day, amount, s.profit, s.tax, lobbyists > 0 ? charity.id : null],
     );
     const { rows: [u2] } = await tx.query(
       `UPDATE users SET cash = cash + $1, total_donated = total_donated + $2, realized_pnl = realized_pnl + $3,
-              charity_id = $4, vested_at = now() WHERE id = $5 RETURNING *`,
-      [s.net, lobbyists, s.profit, charity.id, u.id],
+              charity_id = COALESCE(charity_id, $4), vested_at = CASE WHEN $6 THEN COALESCE(vested_at, now()) ELSE vested_at END
+        WHERE id = $5 RETURNING *`,
+      [s.net, lobbyists, s.profit, lobbyists > 0 ? charity.id : null, u.id, key === 'first_buy'],
     );
+    if (lobbyists > 0) {
+      await tx.query(
+        'INSERT INTO donations (user_id, charity_id, position_id, amount, quarter) VALUES ($1, $2, $3, $4, $5)',
+        [u.id, charity.id, p.id, lobbyists, game.quarterKey(day)],
+      );
+    }
     await tx.query(
-      'INSERT INTO donations (user_id, charity_id, position_id, amount, quarter) VALUES ($1, $2, $3, $4, $5)',
-      [u.id, charity.id, p.id, lobbyists, game.quarterKey(day)],
+      `UPDATE achievements SET claimed_at = now(), gift = $3, tax = $4, lobbyists = $5, charity_id = $6, position_id = $7
+        WHERE user_id = $1 AND key = $2`,
+      [u.id, key, amount, s.tax, lobbyists, lobbyists > 0 ? charity.id : null, p.id],
     );
-    return { user: u2, position: p };
+    return { user: u2, position: p, s, amount, lobbyists };
   });
   if (result.error) return res.status(400).json({ error: result.error });
   const user = result.user;
   user.friend_count = await friendCount(user.id);
-  // The town opens now; deal today's cards so there's something behind the flip.
+  // If this hire opened the town, deal today's cards so there's something behind the flip.
   if (Town.isUnlocked(user.total_donated)) {
     user.town = user.town || Town.fresh();
     Town.tick(user.town, townCtx(user, { day }));
     Town.ensureIssues(user.town, townCtx(user, { day }));
     await query('UPDATE users SET town = $1 WHERE id = $2', [user.town, user.id]);
   }
+  const { s, amount, lobbyists } = result;
   res.json({
     ok: true,
     user: publicUser(user),
     town: townView(user),
+    achievements: await achievements.sync(user),
     receipt: {
-      position_id: result.position.id, symbol: 'TDH', name: 'Trickle Down Holdings', invested: 0, value: amount,
-      real_pct: null, swing_pct: null, busted: false, collected: true, vested: true, exit_price: 0,
-      ...s, tier: 'Vested', lobbyists, hire_cost: hireCost,
-      charity: { id: charity.id, name: charity.name, slug: charity.slug },
+      position_id: result.position.id, symbol: 'GIFT', name: a.title, invested: 0, value: amount,
+      real_pct: null, swing_pct: null, busted: false, collected: true, gift: true, achievement: { key, title: a.title, from: a.from }, exit_price: 0,
+      ...s, tier: 'Gift', lobbyists, hire_cost: hireCost,
+      charity: lobbyists > 0 ? { id: charity.id, name: charity.name, slug: charity.slug } : null,
     },
   });
-}));
+}
+
+router.post('/achievements/claim', auth.requireUser, RL.trade, wrap(async (req, res) => claimGift(req, res, String((req.body || {}).key || ''))));
+// Older clients: the day-one windfall used to be "your shares vested".
+router.post('/vest', auth.requireUser, RL.trade, wrap(async (req, res) => claimGift(req, res, 'first_buy')));
 
 router.post('/sell', auth.requireUser, RL.trade, wrap(async (req, res) => {
   const positionId = Number((req.body || {}).position_id);
@@ -888,7 +923,7 @@ router.post('/sell', auth.requireUser, RL.trade, wrap(async (req, res) => {
     );
     const { rows: [u] } = await tx.query(
       `UPDATE users SET cash = cash + $1, total_donated = total_donated + $2, realized_pnl = realized_pnl + $3,
-              charity_id = COALESCE($4, charity_id)
+              charity_id = COALESCE(charity_id, $4)
        WHERE id = $5 RETURNING *`,
       [s.net, lobbyists, s.profit, charity ? charity.id : null, p.user_id],
     );
@@ -966,14 +1001,16 @@ router.post('/town/build', auth.requireUser, wrap(async (req, res) => {
     const town = u.town || Town.fresh();
     const r = Town.build(town, String(slot || ''), String(key || ''), u.cash, game.dayKey());
     if (r.error) return r;
+    u.friend_count = await friendCount(u.id, tx);
+    const dealt = Town.dealNewUnlocks(town, townCtx(u, { day: game.dayKey() }));
     const { rows: [u2] } = await tx.query(
       'UPDATE users SET cash = cash + $1, town = $2 WHERE id = $3 RETURNING *', [r.cash, town, u.id],
     );
-    return { user: u2 };
+    return { user: u2, dealt };
   });
   if (result.error) return res.status(400).json({ error: result.error });
   result.user.friend_count = await friendCount(result.user.id);
-  res.json({ ok: true, user: publicUser(result.user), town: townView(result.user) });
+  res.json({ ok: true, user: publicUser(result.user), town: townView(result.user), fresh_cards: result.dealt.map((id) => (Town.ISSUES.find((i) => i.id === id) || {}).title).filter(Boolean) });
 }));
 
 // Buy an upgrade for the building on a plot.
@@ -985,14 +1022,82 @@ router.post('/town/upgrade', auth.requireUser, wrap(async (req, res) => {
     const town = u.town || Town.fresh();
     const r = Town.upgrade(town, String(slot || ''), String(key || ''), u.cash, townCtx(u, { day: game.dayKey() }));
     if (r.error) return r;
+    u.friend_count = await friendCount(u.id, tx);
+    const dealt = Town.dealNewUnlocks(town, townCtx(u, { day: game.dayKey() }));
     const { rows: [u2] } = await tx.query(
       'UPDATE users SET cash = cash + $1, town = $2 WHERE id = $3 RETURNING *', [r.cash, town, u.id],
     );
-    return { user: u2 };
+    return { user: u2, dealt };
   });
   if (result.error) return res.status(400).json({ error: result.error });
   result.user.friend_count = await friendCount(result.user.id);
-  res.json({ ok: true, user: publicUser(result.user), town: townView(result.user) });
+  res.json({ ok: true, user: publicUser(result.user), town: townView(result.user), fresh_cards: result.dealt.map((id) => (Town.ISSUES.find((i) => i.id === id) || {}).title).filter(Boolean) });
+}));
+
+// --- Lobbyists: where this quarter's go, and where new ones go ---------------------
+//
+// { allocation?: [{ charity_id, amount }], default_charity_id? }
+// allocation must account for exactly this quarter's lobbyists (they can be
+// moved, not created or destroyed). The move is recorded as +/- donation rows
+// with no position, so every total stays a SUM.
+// Past quarters already marched; only the current one can be rearranged.
+router.post('/lobbyists/assign', auth.requireUser, RL.trade, wrap(async (req, res) => {
+  const body = req.body || {};
+  const day = dayInfo();
+  const { rows: activeRows } = await query('SELECT id FROM charities WHERE active');
+  const active = new Set(activeRows.map((r) => r.id));
+  const defaultId = body.default_charity_id == null ? null : Number(body.default_charity_id);
+  if (defaultId != null && !active.has(defaultId)) return res.status(400).json({ error: "That charity isn't on the list." });
+  let want = null;
+  if (body.allocation != null) {
+    if (!Array.isArray(body.allocation) || body.allocation.length > 100) return res.status(400).json({ error: 'Send the allocation as a list.' });
+    want = new Map();
+    for (const a of body.allocation) {
+      const id = Number(a && a.charity_id), n = Number(a && a.amount);
+      if (!Number.isInteger(id) || !Number.isFinite(n) || n < 0 || n > 1e7) return res.status(400).json({ error: 'Each charity needs a lobbyist count of zero or more.' });
+      want.set(id, game.round2((want.get(id) || 0) + n));
+    }
+  }
+  if (!want && defaultId == null) return res.status(400).json({ error: 'Nothing to change.' });
+
+  const result = await withTx(async (tx) => {
+    const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    let moved = 0;
+    if (want) {
+      const now = await charitySplit(u.id, day.quarter, tx);
+      const have = new Map(now.filter((c) => c.amount > 0).map((c) => [c.id, c.amount]));
+      const total = game.round2([...have.values()].reduce((x, n) => x + n, 0));
+      const asked = game.round2([...want.values()].reduce((x, n) => x + n, 0));
+      if (Math.abs(asked - total) > 0.011) return { error: `That's ${asked} lobbyists; you have ${total} this quarter. Every one needs a charity.` };
+      for (const [id, n] of want) {
+        if (n > (have.get(id) || 0) + 0.001 && !active.has(id)) return { error: "That charity isn't taking new lobbyists." };
+      }
+      // Rounding: let the biggest pile absorb the last cent so nothing is created or lost.
+      const residual = game.round2(total - asked);
+      if (residual !== 0 && want.size) {
+        const [bigId] = [...want.entries()].sort((a, b) => b[1] - a[1])[0];
+        want.set(bigId, game.round2(want.get(bigId) + residual));
+      }
+      for (const id of new Set([...have.keys(), ...want.keys()])) {
+        const diff = game.round2((want.get(id) || 0) - (have.get(id) || 0));
+        if (Math.abs(diff) < 0.01) continue;
+        await tx.query('INSERT INTO donations (user_id, charity_id, amount, quarter) VALUES ($1, $2, $3, $4)', [u.id, id, diff, day.quarter]);
+        if (diff > 0) moved = game.round2(moved + diff);
+      }
+    }
+    const { rows: [u2] } = defaultId != null
+      ? await tx.query('UPDATE users SET charity_id = $1 WHERE id = $2 RETURNING *', [defaultId, u.id])
+      : { rows: [u] };
+    return { user: u2, moved };
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  const split = await charitySplit(result.user.id, day.quarter);
+  res.json({
+    ok: true,
+    moved: result.moved,
+    user: { ...publicUser(result.user), quarter_donated: game.round2(split.reduce((x, c) => x + c.amount, 0)) },
+    donations_by_charity: split,
+  });
 }));
 
 // --- Public boards ---------------------------------------------------------------
@@ -1002,18 +1107,22 @@ router.get('/trickle', wrap(async (req, res) => {
   const day = dayInfo();
   const { rows } = await query(
     `SELECT c.id, c.slug, c.name, c.blurb, c.url, c.category,
-            COALESCE(SUM(d.amount) FILTER (WHERE d.quarter = $1), 0)::float8 AS quarter_total,
-            COALESCE(SUM(d.amount), 0)::float8 AS all_time,
-            COUNT(DISTINCT d.user_id) FILTER (WHERE d.quarter = $1)::int AS quarter_donors
-       FROM charities c LEFT JOIN donations d ON d.charity_id = c.id
+            GREATEST(0, COALESCE(q.total, 0))::float8 AS quarter_total,
+            COALESCE(a.total, 0)::float8 AS all_time,
+            COALESCE(q.donors, 0)::int AS quarter_donors
+       FROM charities c
+       LEFT JOIN (SELECT charity_id, SUM(n) AS total, COUNT(*) FILTER (WHERE n > 0.005) AS donors
+                    FROM (SELECT charity_id, user_id, SUM(amount) AS n FROM donations WHERE quarter = $1 GROUP BY charity_id, user_id) x
+                   GROUP BY charity_id) q ON q.charity_id = c.id
+       LEFT JOIN (SELECT charity_id, SUM(amount) AS total FROM donations GROUP BY charity_id) a ON a.charity_id = c.id
       WHERE c.active
-      GROUP BY c.id ORDER BY quarter_total DESC, all_time DESC, c.sort`,
+      ORDER BY quarter_total DESC, all_time DESC, c.sort`,
     [day.quarter],
   );
   const quarterTotal = rows.reduce((s, r) => s + r.quarter_total, 0);
   const allTime = rows.reduce((s, r) => s + r.all_time, 0);
   const { rows: [players] } = await query(
-    'SELECT COUNT(DISTINCT user_id)::int AS donors FROM donations WHERE quarter = $1', [day.quarter],
+    `SELECT COUNT(*)::int AS donors FROM (SELECT user_id FROM donations WHERE quarter = $1 GROUP BY user_id HAVING SUM(amount) > 0.005) x`, [day.quarter],
   );
   res.json({
     quarter: day.quarter,
@@ -1065,7 +1174,26 @@ router.get('/leaderboard', optionalUser, wrap(async (req, res) => {
       WHERE p.status IN ('closed', 'rolled') AND p.closed_at > now() - interval '24 hours' AND p.invested > 0 AND ${scope}
       ORDER BY gain_pct DESC LIMIT 25`,
   );
-  res.json({ quarter: day.quarter, quarter_ends_at: day.quarter_ends_at, friends_only: !!friendsOnly, all_time: allTime, last_24h: day24 });
+  // Biggest positions held right now, by what they're worth. Priced from
+  // quotes the game already has (this process's last good quote, else the
+  // price log), never a fresh provider call per board view.
+  const { rows: open } = await query(
+    `SELECT p.*, u.username FROM positions p JOIN users u ON u.id = p.user_id
+      WHERE p.status = 'open' AND ${scope}
+      ORDER BY COALESCE(p.matured_value, p.invested) DESC LIMIT 400`,
+  );
+  const live = open.filter((p) => !p.matured_at);
+  const logged = await pricelog.latest(live.filter((p) => !prices.peek(p.symbol)).map((p) => p.symbol));
+  const biggest = open.map((p) => {
+    const q = p.matured_at ? null : (prices.peek(p.symbol) || logged[p.symbol] || null);
+    const sp = shapePosition(p, q);
+    return {
+      username: p.username, symbol: p.symbol, name: p.name, asset_type: p.asset_type,
+      invested: sp.invested, value: sp.value != null ? sp.value : sp.invested, swing_pct: sp.swing_pct,
+      multiplier_now: sp.multiplier_now, matured: sp.matured, busted: !!sp.busted, ride_count: sp.ride_count, priced: sp.value != null,
+    };
+  }).sort((a, b) => b.value - a.value || b.invested - a.invested).slice(0, 25);
+  res.json({ quarter: day.quarter, quarter_ends_at: day.quarter_ends_at, friends_only: !!friendsOnly, all_time: allTime, last_24h: day24, biggest });
 }));
 
 // --- Friends --------------------------------------------------------------------
@@ -1097,6 +1225,7 @@ async function playerProfile(viewer, u, day) {
   );
   const unlocked = Town.isUnlocked(u.total_donated);
   const town = u.town && unlocked ? Town.view(u.town, townCtx(u, { day: day.key })) : null;
+  const { rows: earned } = await query('SELECT key FROM achievements WHERE user_id = $1 ORDER BY earned_at', [u.id]);
   const isFriend = viewer ? (await query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [viewer.id, u.id])).rows.length > 0 : false;
   const addedYou = viewer ? (await query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [u.id, viewer.id])).rows.length > 0 : false;
   return {
@@ -1110,9 +1239,10 @@ async function playerProfile(viewer, u, day) {
     in_play: game.round2(u.cash + positions.reduce((s, p) => s + (p.quote_error ? p.invested : p.value), 0)),
     positions,
     top_charity: top ? top.name : null,
+    achievements: { earned: earned.map((r) => achievements.BY_KEY.get(r.key)).filter(Boolean).map((a) => ({ key: a.key, title: a.title })), total: achievements.LIST.length },
     last_seen: lastSeen(u.last_seen_at),
     town: town ? {
-      happiness: town.happiness, health: town.health, income: town.income, motto: town.motto,
+      happiness: town.happiness, income: town.income, hire_cost: town.hire_cost, motto: town.motto,
       buildings: town.plots.map((p) => (p.building ? { slot: p.slot, key: p.key, name: p.building.name, tier: p.building.tier } : { slot: p.slot, key: null })),
     } : null,
     is_friend: isFriend,
@@ -1146,7 +1276,7 @@ router.get('/friends', auth.requireUser, wrap(async (req, res) => {
   const friends = rows.map((u) => ({
     username: u.username, streak: u.streak, total_donated: u.total_donated, quarter_donated: game.round2(Math.max(0, u.quarter_total)),
     badges: game.badgesFor(u.total_donated), cash: u.cash, last_seen: lastSeen(u.last_seen_at),
-    town: u.town && Town.isUnlocked(u.total_donated) ? { happiness: u.town.happiness, health: u.town.health, motto: Town.view(u.town, townCtx(u, { day: day.key })).motto } : null,
+    town: u.town && Town.isUnlocked(u.total_donated) ? { happiness: u.town.happiness, motto: Town.view(u.town, townCtx(u, { day: day.key })).motto } : null,
   }));
   res.json({ friends, added_you: followers.n, max: MAX_FRIENDS, your_username: req.user.username, is_guest: req.user.is_guest });
 }));

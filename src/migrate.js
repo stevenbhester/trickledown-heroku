@@ -157,10 +157,35 @@ CREATE TABLE IF NOT EXISTS price_log (
   PRIMARY KEY (symbol, at)
 );
 
+-- Achievements: rare milestones with a one-time gift from Mommy & Daddy
+-- (src/achievements.js). Earned automatically, claimed by the player, which
+-- is when the gift is taxed and the lobbyists hired.
+CREATE TABLE IF NOT EXISTS achievements (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  earned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  claimed_at TIMESTAMPTZ,
+  gift NUMERIC(14,2),
+  tax NUMERIC(14,2),
+  lobbyists NUMERIC(14,2),
+  charity_id INTEGER REFERENCES charities(id),
+  position_id INTEGER REFERENCES positions(id) ON DELETE SET NULL,
+  PRIMARY KEY (user_id, key)
+);
+
 `;
 
 async function migrate() {
   await pool.query(SCHEMA);
+  // Players who took the old "your shares vested" windfall already have the
+  // first achievement, claimed.
+  await pool.query(
+    `INSERT INTO achievements (user_id, key, earned_at, claimed_at, gift, tax, position_id)
+     SELECT u.id, 'first_buy', u.vested_at, u.vested_at, p.proceeds, p.tax, p.id
+       FROM users u LEFT JOIN LATERAL (SELECT id, proceeds, tax FROM positions WHERE user_id = u.id AND status = 'vested' ORDER BY id LIMIT 1) p ON true
+      WHERE u.vested_at IS NOT NULL
+     ON CONFLICT (user_id, key) DO NOTHING`,
+  );
   for (let i = 0; i < charities.length; i++) {
     const c = charities[i];
     await pool.query(
