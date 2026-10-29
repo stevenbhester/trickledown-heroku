@@ -107,7 +107,7 @@ so history is kept. See the README's "Before real money moves" list first.
 
 The page and the server ship separately, so it's easy to update one and not
 the other. Open `https://<your-app>.herokuapp.com/health` in a browser. It
-should say `"api":8` (the number in `API_VERSION` in `src/routes.js`). No
+should say `"api":9` (the number in `API_VERSION` in `src/routes.js`). No
 `api`, or a lower number, means the server is older than the page: upload
 the whole backend again (every file in `src/`, including any new ones) and let
 Heroku redeploy. Signed in as an admin, the page also says so in a yellow bar

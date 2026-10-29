@@ -173,6 +173,20 @@ CREATE TABLE IF NOT EXISTS achievements (
   PRIMARY KEY (user_id, key)
 );
 
+-- The wall on a player's profile. Only people the owner has added can read
+-- or write it; the owner can delete anything on it, an author their own.
+-- Plain text, 280 characters, never rendered as HTML.
+CREATE TABLE IF NOT EXISTS wall_posts (
+  id SERIAL PRIMARY KEY,
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 280),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS wall_posts_owner ON wall_posts (owner_id, created_at DESC);
+-- When the owner last looked at their own wall, for the "new on your wall" dot.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS wall_seen_at TIMESTAMPTZ;
+
 `;
 
 async function migrate() {

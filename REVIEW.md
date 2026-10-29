@@ -586,6 +586,74 @@ Fixes, so a half-finished deploy can't look like a bug again:
 - `index.html` loads its scripts and stylesheet with `?v=…`, so a cached
   page can't mix an old `index.html` with new scripts. Bump it each release.
 
+## Profiles, the ☰ menu, and achievement gifts
+
+**Navigation.** The Today / Lobby / Leaders / How tabs are gone. Today's game
+is the page; everything else is in a ☰ menu (your profile, Leaderboards,
+Friends, Lobbyfest & charities, Trophies, How to play, Account, Sign out).
+Friends moved off the Leaders page to a page of their own. Every username in
+the game opens that player's profile (`#u/<name>`; yours is `#profile`).
+
+**Profile** (GET /players/:username, extended; public like the boards):
+- *Trading gains*: a Robinhood-style line of cumulative profit and loss from
+  positions only, one point per day since the first buy, with today's point
+  including what's open at current prices. Scrub it, pick 1W / 1M / 3M / All.
+  `performanceFor()` sums `profit` on closed and rolled positions by
+  `closed_day`; gifts and the old vest are excluded by status, and town
+  spending never touches positions. Before tax. Rides: the roll realizes the
+  first leg, the ride's own close the rest; summed, that's the whole chain.
+  Win rate, best and worst trade, open P&L underneath.
+- Holding now, TrickleTown (profit/day, happiness, lobbyist price, buildings
+  with their upgrades, Preston-vs-Dolores tally), lobbyists by charity this
+  quarter, trophies.
+- The tally is new state (`town.sides`), counted from today on; older towns
+  are seeded from today's played cards.
+
+**The wall.** Friends-only: readable and writable by the owner and by anyone
+the owner has added (adding someone is the owner's say-so, so strangers
+can't post). The owner deletes anything on their wall, an author their own.
+Plain text, 280 characters, escaped on render, never HTML. On the way in:
+every control and format character goes (bidi overrides, zero-width
+spaces; the emoji joiner stays), line separators become newlines, blank-
+looking filler letters go, combining marks are capped at two per letter, and
+3+ newlines collapse. 12 posts per 10 minutes per account; a wall keeps its
+latest 200.
+
+A separate security review of this pass found one medium issue and four low
+ones; all fixed: an unfriended author deleting their own post got the wall
+back in the response (now empty unless they still have access); the Unicode
+gaps above; profiles listed every open position (now the biggest 60 plus a
+count, and buying stops at 100 open positions); other people's profiles
+showed exact buy and achievement times (now "about 5h", the day, and the
+month you joined); and "Add friend" now says it opens your wall to them. GET /me carries
+`wall_unread` (posts by others since you last opened your profile) for the
+red dot on ☰. Admin reset clears walls too.
+
+**Achievement gifts.** Simulated 2,000 daily players for 90 days (allowance
+$100K + $10K/day of streak, capped $200K; ×10 stocks at ~1.6% daily moves;
+25% tax). Because every day's allowance stays on the coin, money in play is
+~$850K at day 7, ~$4M at day 30, ~$7M by day 90, and trading hires ~15
+lobbyists/day in week one, ~80/day by day 30.
+
+| | when | old gift | share of money then | verdict |
+|---|---|---|---|---|
+| Skin in the Game | day 1 | $40K | 40% | right: unlocks the town |
+| Realized Gains, Let It Ride, Landlord, Networking | days 1–5 | $15–40K | 10–20% | fine |
+| Creature of Habit (7-day streak) | day 7 | $30K | 3.5% | too small |
+| Seven Figures | day 8 | $100K | 9% | fine-ish |
+| Power Broker (50 lobbyists) | day 7 | $60K | 6% | earned in week one: not rare |
+| Clocked In (30-day streak) | day 30 | $100K | 2.5% | far too small: a third of one day's trading |
+| Legendary, Character Building | rare, ~day 40 | $50K / $25K | under 5% | far too small for the rarest two |
+
+Nothing was overpowered; everything after week one was underpowered. Now
+each gift is `max(floor, share × money in play)`, rounded like a check, with
+the old amounts as floors: 4% for the early ones, 6% for Creature of Habit,
+Character Building and Seven Figures, 10% for Legendary and Power Broker,
+15% for Clocked In. A gift then hires roughly half a day (early) to two days
+(30-day streak) of what trading hires at that point, and adds 3–11% to the
+money in play after tax. Power Broker is now 500 lobbyists (about three weeks).
+`scripts/test-town.js` checks the amounts.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

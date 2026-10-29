@@ -227,6 +227,22 @@ ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
   ok('$29.97K buys a $30K building (charged $29.97K); $29.8K does not');
 }
 
+// --- Achievement gifts: a floor, then a share of the money in play -------------
+{
+  const A = require('../src/achievements');
+  const gift = (key, inplay) => A.BY_KEY.get(key).gift({ inplay });
+  assert.strictEqual(A.nice(43), 45); assert.strictEqual(A.nice(613), 610); assert.strictEqual(A.nice(1234), 1250);
+  assert.strictEqual(gift('first_win', 100), 20, 'early: the floor');
+  assert.strictEqual(gift('streak_7', 850), 50, 'a week in, ~$850K in play: 6%');
+  assert.strictEqual(gift('streak_30', 4000), 600, 'a month in, ~$4M in play: 15%');
+  assert.strictEqual(gift('legend', 1000), 100);
+  assert.strictEqual(gift('first_buy', 0), 40, 'day one stays VEST_AMOUNT');
+  assert.ok(A.met('power_broker', { lobbyists: 500 }) && !A.met('power_broker', { lobbyists: 499 }), 'Power Broker is 500 lobbyists');
+  // Never so big it dwarfs trading: the biggest share is 15% of what's in play.
+  for (const a of A.LIST) assert.ok(a.gift({ inplay: 10000 }) <= 1500 + 50, `${a.key} gift capped by share`);
+  ok('gifts: floors early, a share of money in play later, rounded like a check');
+}
+
 // --- The front end has the same file ------------------------------------------
 const fe = path.join(__dirname, '../../trickledown-stevenhester-com/js/town.js');
 if (fs.existsSync(fe)) {

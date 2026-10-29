@@ -356,7 +356,7 @@
   }
 
   function fresh() {
-    return { v: 5, day: null, happiness: 55, perks: 0, plots: { housing: null, square: null }, upgrades: { housing: [], square: [] }, built: { housing: null, square: null }, issues: [], report: null, played: [], flags: [], last: {}, days: 0, admin_open: [] };
+    return { v: 5, day: null, happiness: 55, perks: 0, plots: { housing: null, square: null }, upgrades: { housing: [], square: [] }, built: { housing: null, square: null }, issues: [], report: null, played: [], flags: [], last: {}, days: 0, admin_open: [], sides: { preston: 0, dolores: 0 } };
   }
   function migrate(t) {
     if (!t.upgrades) t.upgrades = { housing: [], square: [] };
@@ -367,6 +367,12 @@
     if (!t.admin_open) t.admin_open = [];               // card ids an admin forced open ('*' = all)
     if (!t.built) t.built = { housing: t.plots.housing ? t.day : null, square: t.plots.square ? t.day : null };
     if ('health' in t) delete t.health;                 // health was cut: two scores now
+    // Cards played per side, for the profile. Counting started with profiles;
+    // today's already-played cards seed it for older towns.
+    if (!t.sides) {
+      t.sides = { preston: 0, dolores: 0 };
+      for (const i of t.issues || []) if (i.chosen === 'preston' || i.chosen === 'dolores') t.sides[i.chosen] += 1;
+    }
     return t;
   }
   const dayDiff = (a, b) => (a && b ? Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000) : 0);
@@ -621,6 +627,7 @@
     const paid = cash < 0 ? charge(cashAvailable, -cash) : cash;
     applyFx(t, fx);
     slot.chosen = side;
+    t.sides[side] = (t.sides[side] || 0) + 1;
     if (!t.played.includes(issueId)) t.played.push(issueId);
     t.last[issueId] = t.day;
     const sets = BY_ID.get(issueId)[side].sets || null;

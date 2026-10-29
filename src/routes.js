@@ -25,6 +25,8 @@ const RL = {
   // The live ticker polls every few seconds right after a buy.
   quote: limit({ name: 'quote', max: 240, windowMs: 60e3, message: 'Slow down. Try again in a minute.' }),
   social: limit({ name: 'social', max: 30, windowMs: 15 * 60e3, message: 'That is a lot of friends in a short time. Try again in 15 minutes.' }),
+  // Wall posts, per account (not per IP): a conversation, not a firehose.
+  wall: limit({ name: 'wall', max: 12, windowMs: 10 * 60e3, key: (req) => (req.user ? `u${req.user.id}` : req.ip), message: 'That is a lot of wall posts. Give it ten minutes.' }),
   // Admin testing tools: their own bucket, so a burst of grants and resets
   // doesn't use up the one that guards password changes. Only admins reach it.
   admin: limit({ name: 'admin', max: 120, windowMs: 15 * 60e3, message: 'Slow down. Try again in a few minutes.' }),
@@ -149,7 +151,7 @@ function dayInfo(now = new Date()) {
 // The page checks this so a half-finished deploy (new page, old server) is
 // caught on sight instead of showing up as missing features. Bump it with any
 // release the page depends on; js/app.js API_WANTS must match.
-const API_VERSION = 8;
+const API_VERSION = 9;
 
 router.get('/health', (req, res) => res.json({ ok: true, api: API_VERSION, provider: cfg.priceProvider, google: google.enabled(), demo: cfg.demoMode }));
 
@@ -456,9 +458,10 @@ router.post('/admin/reset', auth.requireUser, requireAdmin, RL.admin, wrap(async
     await tx.query('DELETE FROM positions WHERE user_id = $1', [target.id]);
     await tx.query('DELETE FROM friends WHERE user_id = $1', [target.id]);
     await tx.query('DELETE FROM link_codes WHERE user_id = $1', [target.id]);
+    await tx.query('DELETE FROM wall_posts WHERE owner_id = $1 OR author_id = $1', [target.id]);
     await tx.query(
       `UPDATE users SET cash = 0, total_donated = 0, realized_pnl = 0, streak = 0, last_allowance_day = NULL,
-              town = NULL, charity_id = NULL, vested_at = NULL WHERE id = $1`,
+              town = NULL, charity_id = NULL, vested_at = NULL, wall_seen_at = NULL WHERE id = $1`,
       [target.id],
     );
   });
@@ -658,15 +661,22 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     vesting,
     achievements: ach,
     fresh_cards: freshCards.map((id) => (Town.ISSUES.find((i) => i.id === id) || {}).title).filter(Boolean),
+    wall_unread: await wallUnread(user),
     token: renewedToken,
   });
 }));
+
+// More open positions than anyone plays with, few enough that every page
+// that lists them stays quick.
+const MAX_OPEN = 100;
 
 router.post('/buy', auth.requireUser, RL.trade, wrap(async (req, res) => {
   const asset = assets.find((req.body || {}).symbol);
   const amount = game.round2(Number((req.body || {}).amount));
   if (!asset) return res.status(400).json({ error: 'Pick something from the list.' });
   if (!(amount >= 0.01)) return res.status(400).json({ error: 'Invest at least a penny.' });
+  const { rows: [held] } = await query("SELECT COUNT(*)::int AS n FROM positions WHERE user_id = $1 AND status = 'open'", [req.user.id]);
+  if (held.n >= MAX_OPEN) return res.status(400).json({ error: `That's ${MAX_OPEN} positions on the coin. Collect some first.` });
 
   let quote;
   try { quote = await prices.getQuote(asset); } catch (e) {
@@ -1205,49 +1215,175 @@ router.get('/leaderboard', optionalUser, wrap(async (req, res) => {
 
 const MAX_FRIENDS = 50;
 
+// How a player's trading has gone: profit from positions only, by the day
+// it was realized, as a running total. Achievement gifts (and the old vest)
+// aren't trading, and TrickleTown spending never touches positions, so
+// neither moves the line. A ride counts when it rolls (its profit is
+// realized then) and again when the ride closes, on its own stake; summed,
+// that's the whole chain's gain before tax. Open positions are added at
+// the end as "now", at today's value.
+async function performanceFor(userId, openShaped, day) {
+  const { rows } = await query(
+    `SELECT closed_day AS d, SUM(profit)::float8 AS pnl, COUNT(*)::int AS n,
+            COUNT(*) FILTER (WHERE profit > 0)::int AS wins
+       FROM positions
+      WHERE user_id = $1 AND status IN ('closed', 'rolled') AND closed_day IS NOT NULL
+      GROUP BY closed_day ORDER BY closed_day`,
+    [userId],
+  );
+  const { rows: [first] } = await query(
+    "SELECT MIN(opened_day) AS d FROM positions WHERE user_id = $1 AND status NOT IN ('vested', 'gift')", [userId],
+  );
+  const { rows: extremes } = await query(
+    `(SELECT 'best' AS k, symbol, profit::float8 AS profit, invested::float8 AS invested, closed_day AS d, tier FROM positions
+       WHERE user_id = $1 AND status IN ('closed', 'rolled') AND profit > 0 ORDER BY profit DESC LIMIT 1)
+     UNION ALL
+     (SELECT 'worst', symbol, profit::float8, invested::float8, closed_day, tier FROM positions
+       WHERE user_id = $1 AND status IN ('closed', 'rolled') AND profit < 0 ORDER BY profit ASC LIMIT 1)`,
+    [userId],
+  );
+  const byDay = new Map(rows.map((r) => [r.d, r]));
+  const series = [];
+  let total = 0, closed = 0, wins = 0;
+  if (first && first.d) {
+    // One point per day from the first buy to today, so a quiet stretch reads
+    // as flat rather than vanishing. Capped at a year.
+    let d = game.addDays(first.d, -1);
+    const start = game.addDays(day.key, -365);
+    if (d < start) d = start;
+    for (const r of rows) if (r.d <= d) { total += r.pnl; closed += r.n; wins += r.wins; }
+    series.push({ d, v: game.round2(total) });
+    while (d < day.key) {
+      d = game.addDays(d, 1);
+      const r = byDay.get(d);
+      if (r) { total += r.pnl; closed += r.n; wins += r.wins; }
+      series.push({ d, v: game.round2(total) });
+    }
+  }
+  const openPnl = game.round2(openShaped.reduce((sum, p) => sum + (p.quote_error || p.value == null ? 0 : p.value - p.invested), 0));
+  const pick = (k) => { const r = extremes.find((x) => x.k === k); return r ? { symbol: r.symbol, profit: game.round2(r.profit), pct: r.invested > 0 ? r.profit / r.invested : null, day: r.d, tier: r.tier } : null; };
+  return {
+    series,
+    realized: game.round2(total),
+    open_pnl: openPnl,
+    total: game.round2(total + openPnl),
+    closed,
+    wins,
+    best: pick('best'),
+    worst: pick('worst'),
+    since: first && first.d ? first.d : null,
+  };
+}
+
+// The wall: readable and writable by the owner and by anyone the owner has
+// added. Adding someone is the owner's say-so, so a stranger can't post.
+async function wallAccess(viewer, owner) {
+  if (!viewer) return false;
+  if (viewer.id === owner.id) return true;
+  const { rows } = await query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [owner.id, viewer.id]);
+  return rows.length > 0;
+}
+
+const WALL_MAX = 280;
+const PROFILE_POSITIONS = 60;
+async function wallPosts(owner, viewer) {
+  const { rows } = await query(
+    `SELECT w.id, w.body, w.created_at, a.username AS author, w.author_id
+       FROM wall_posts w JOIN users a ON a.id = w.author_id
+      WHERE w.owner_id = $1 ORDER BY w.created_at DESC, w.id DESC LIMIT 40`,
+    [owner.id],
+  );
+  return rows.map((r) => ({
+    id: r.id, body: r.body, at: r.created_at, author: r.author,
+    mine: !!viewer && r.author_id === viewer.id,
+    can_delete: !!viewer && (r.author_id === viewer.id || owner.id === viewer.id),
+  }));
+}
+
+async function wallUnread(user) {
+  const { rows: [r] } = await query(
+    `SELECT COUNT(*)::int AS n FROM wall_posts
+      WHERE owner_id = $1 AND author_id <> $1 AND created_at > COALESCE($2, '-infinity'::timestamptz)`,
+    [user.id, user.wall_seen_at || null],
+  );
+  return r.n;
+}
+
+// Plain text only: no control characters, at most two newlines in a row,
+// trimmed. Rendered escaped by the client; never as HTML.
+function cleanWallBody(raw) {
+  return String(raw == null ? '' : raw)
+    .normalize('NFC')
+    .replace(/\r\n?|[\u2028\u2029\u0085]/g, '\n')
+    .replace(/(?!\n|\u200D)[\p{Cc}\p{Cf}]/gu, '') // controls, bidi, zero-width; keep newlines and the emoji joiner
+    .replace(/[\u115F\u1160\u3164\uFFA0\u2800]/g, '') // blank-looking "letters"
+    .replace(/(\p{M}{2})\p{M}+/gu, '$1') // no towers of combining marks
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 async function playerProfile(viewer, u, day) {
   const { rows: open } = await query(
-    "SELECT * FROM positions WHERE user_id = $1 AND status = 'open' ORDER BY opened_at ASC", [u.id],
+    `SELECT * FROM positions WHERE user_id = $1 AND status = 'open'
+      ORDER BY COALESCE(matured_value, invested) DESC, opened_at ASC LIMIT ${PROFILE_POSITIONS}`, [u.id],
   );
+  const { rows: [openCount] } = await query("SELECT COUNT(*)::int AS n FROM positions WHERE user_id = $1 AND status = 'open'", [u.id]);
   await maturer.settleMatured(open).catch(() => {});
   const live = open.filter((p) => !p.matured_at);
   const quotes = await prices.getQuotes(live.map((p) => assets.find(p.symbol)).filter(Boolean));
+  const own = !!viewer && viewer.id === u.id;
+  // Someone else sees "matures in about 5h", not the minute you bought.
   const positions = open.map((p) => shapePosition(p, quotes[p.symbol])).map((p) => ({
     id: p.id, symbol: p.symbol, name: p.name, invested: p.invested, value: p.value, swing_pct: p.swing_pct,
-    multiplier_now: p.multiplier_now, matured: p.matured, busted: p.busted, quote_error: p.quote_error, ride_count: p.ride_count,
+    multiplier_now: p.multiplier_now, multiplier: p.multiplier, matured: p.matured, busted: p.busted, quote_error: p.quote_error,
+    ride_count: p.ride_count,
+    ...(own ? { matures_at: p.matures_at } : { hours_left: p.matured ? 0 : Math.max(1, Math.round((new Date(p.matures_at) - Date.now()) / 3600e3)) }),
   }));
   const { rows: [q] } = await query(
     'SELECT COALESCE(SUM(amount), 0)::float8 AS n FROM donations WHERE user_id = $1 AND quarter = $2', [u.id, day.quarter],
   );
-  const { rows: [top] } = await query(
-    `SELECT c.name, SUM(d.amount)::float8 AS n FROM donations d JOIN charities c ON c.id = d.charity_id
-      WHERE d.user_id = $1 AND d.quarter = $2 GROUP BY c.name HAVING SUM(d.amount) > 0 ORDER BY n DESC LIMIT 1`, [u.id, day.quarter],
-  );
+  const split = (await charitySplit(u.id, day.quarter)).filter((c) => c.amount > 0).map((c) => ({ name: c.name, slug: c.slug, amount: c.amount }));
   const unlocked = Town.isUnlocked(u.total_donated);
+  if (u.town) Town.migrate(u.town);
   const town = u.town && unlocked ? Town.view(u.town, townCtx(u, { day: day.key })) : null;
-  const { rows: earned } = await query('SELECT key FROM achievements WHERE user_id = $1 ORDER BY earned_at', [u.id]);
+  const { rows: earned } = await query('SELECT key, earned_at FROM achievements WHERE user_id = $1 ORDER BY earned_at', [u.id]);
   const isFriend = viewer ? (await query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [viewer.id, u.id])).rows.length > 0 : false;
   const addedYou = viewer ? (await query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [u.id, viewer.id])).rows.length > 0 : false;
+  const isYou = !!viewer && viewer.id === u.id;
+  const wallOk = await wallAccess(viewer, u);
+  const performance = await performanceFor(u.id, positions, day);
   return {
     username: u.username,
     is_guest: u.is_guest,
+    joined: u.created_at ? new Date(u.created_at).toISOString().slice(0, 7) : null, // the month, not the moment
     streak: u.streak,
     total_donated: u.total_donated,
     quarter_donated: game.round2(Math.max(0, q.n)),
+    lobbyists_by_charity: split,
     badges: game.badgesFor(u.total_donated),
     cash: u.cash,
     in_play: game.round2(u.cash + positions.reduce((s, p) => s + (p.quote_error ? p.invested : p.value), 0)),
     positions,
-    top_charity: top ? top.name : null,
-    achievements: { earned: earned.map((r) => achievements.BY_KEY.get(r.key)).filter(Boolean).map((a) => ({ key: a.key, title: a.title })), total: achievements.LIST.length },
+    positions_total: openCount.n,
+    performance,
+    top_charity: split.length ? split[0].name : null,
+    achievements: {
+      earned: earned.map((r) => { const a = achievements.BY_KEY.get(r.key); return a ? { key: a.key, title: a.title, how: a.how, day: game.dayKey(new Date(r.earned_at)) } : null; }).filter(Boolean),
+      total: achievements.LIST.length,
+    },
     last_seen: lastSeen(u.last_seen_at),
     town: town ? {
       happiness: town.happiness, income: town.income, hire_cost: town.hire_cost, motto: town.motto,
-      buildings: town.plots.map((p) => (p.building ? { slot: p.slot, key: p.key, name: p.building.name, tier: p.building.tier } : { slot: p.slot, key: null })),
+      sides: { preston: u.town.sides.preston || 0, dolores: u.town.sides.dolores || 0 },
+      buildings: town.plots.map((p) => (p.building
+        ? { slot: p.slot, label: p.label, key: p.key, name: p.building.name, tier: p.building.tier, days: p.days, upgrades: p.building.upgrades.filter((x) => x.owned).map((x) => ({ name: x.name, tier: x.tier })) }
+        : { slot: p.slot, label: p.label, key: null })),
     } : null,
     is_friend: isFriend,
     added_you: addedYou,
-    is_you: !!viewer && viewer.id === u.id,
+    is_you: isYou,
+    wall: wallOk ? { open: true, max: WALL_MAX, posts: await wallPosts(u, viewer) } : { open: false },
   };
 }
 
@@ -1297,11 +1433,55 @@ router.post('/friends/remove', auth.requireUser, wrap(async (req, res) => {
   res.json({ ok: true, friend_count: await friendCount(req.user.id) });
 }));
 
-// A player's public page: their coin, their town, their standing.
+// A player's profile: their trading, their coin, their town, their standing.
+// Public, like the boards it's linked from; the wall alone is friends-only.
 router.get('/players/:username', optionalUser, RL.read, wrap(async (req, res) => {
   const u = await findPlayer(req.params.username);
   if (!u) return res.status(404).json({ error: 'No player by that name.' });
-  res.json({ player: await playerProfile(req.user || null, u, dayInfo()) });
+  const player = await playerProfile(req.user || null, u, dayInfo());
+  // Looking at your own profile catches you up on your wall.
+  if (player.is_you) await query('UPDATE users SET wall_seen_at = now() WHERE id = $1', [u.id]);
+  res.json({ player });
+}));
+
+router.get('/players/:username/wall', auth.requireUser, RL.read, wrap(async (req, res) => {
+  const owner = await findPlayer(req.params.username);
+  if (!owner) return res.status(404).json({ error: 'No player by that name.' });
+  if (!(await wallAccess(req.user, owner))) return res.status(403).json({ error: `Only people ${owner.username} has added can see this wall.` });
+  res.json({ posts: await wallPosts(owner, req.user), max: WALL_MAX });
+}));
+
+router.post('/players/:username/wall', auth.requireUser, RL.wall, wrap(async (req, res) => {
+  const owner = await findPlayer(req.params.username);
+  if (!owner) return res.status(404).json({ error: 'No player by that name.' });
+  if (!(await wallAccess(req.user, owner))) return res.status(403).json({ error: `Only people ${owner.username} has added can write here.` });
+  const body = cleanWallBody((req.body || {}).body);
+  if (!body) return res.status(400).json({ error: 'Write something first.' });
+  if ([...body].length > WALL_MAX) return res.status(400).json({ error: `Keep it to ${WALL_MAX} characters.` });
+  // A wall holds the latest 200; older posts fall off.
+  await withTx(async (tx) => {
+    await tx.query('INSERT INTO wall_posts (owner_id, author_id, body) VALUES ($1, $2, $3)', [owner.id, req.user.id, body]);
+    await tx.query(
+      `DELETE FROM wall_posts WHERE owner_id = $1 AND id NOT IN
+         (SELECT id FROM wall_posts WHERE owner_id = $1 ORDER BY created_at DESC, id DESC LIMIT 200)`,
+      [owner.id],
+    );
+  });
+  if (owner.id === req.user.id) await query('UPDATE users SET wall_seen_at = now() WHERE id = $1', [owner.id]);
+  res.json({ ok: true, posts: await wallPosts(owner, req.user) });
+}));
+
+// The owner can delete anything on their wall; an author, their own post.
+router.post('/wall/:id/delete', auth.requireUser, RL.wall, wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Which post?' });
+  const { rows: [w] } = await query('SELECT * FROM wall_posts WHERE id = $1', [id]);
+  if (!w || (w.owner_id !== req.user.id && w.author_id !== req.user.id)) return res.status(404).json({ error: 'No such post.' });
+  await query('DELETE FROM wall_posts WHERE id = $1', [id]);
+  const { rows: [owner] } = await query('SELECT * FROM users WHERE id = $1', [w.owner_id]);
+  // An author who's since been unfriended can still delete their own post,
+  // but doesn't get to read the wall in return.
+  res.json({ ok: true, posts: owner && (await wallAccess(req.user, owner)) ? await wallPosts(owner, req.user) : [] });
 }));
 
 
