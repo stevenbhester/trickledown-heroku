@@ -61,7 +61,14 @@ function publicUser(u) {
     google: !!u.google_sub,
     email: u.email || null,
     is_admin: auth.isAdmin(u),
+    // How many days the account has been going, the first one being Day 1
+    // (game time zone). The share card leads with it.
+    account_day: u.created_at ? accountDay(u.created_at) : null,
   };
+}
+function accountDay(createdAt, now = new Date()) {
+  const a = Date.parse(`${game.dayKey(new Date(createdAt))}T00:00:00Z`), b = Date.parse(`${game.dayKey(now)}T00:00:00Z`);
+  return Math.max(1, Math.round((b - a) / 86400000) + 1);
 }
 
 // The charity new lobbyists go to. users.charity_id is the player's default:
@@ -461,7 +468,7 @@ router.post('/admin/reset', auth.requireUser, requireAdmin, RL.admin, wrap(async
     await tx.query('DELETE FROM wall_posts WHERE owner_id = $1 OR author_id = $1', [target.id]);
     await tx.query(
       `UPDATE users SET cash = 0, total_donated = 0, realized_pnl = 0, streak = 0, last_allowance_day = NULL,
-              town = NULL, charity_id = NULL, vested_at = NULL, wall_seen_at = NULL WHERE id = $1`,
+              town = NULL, charity_id = NULL, vested_at = NULL, wall_seen_at = NULL, created_at = now() WHERE id = $1`,
       [target.id],
     );
   });
@@ -686,7 +693,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     vesting,
     achievements: ach,
     fresh_cards: freshCards.map((id) => (Town.ISSUES.find((i) => i.id === id) || {}).title).filter(Boolean),
-    wall_unread: await wallUnread(user),
+    ...(await wallUnread(user).then((w) => ({ wall_unread: w.n, wall_unread_from: w.from, wall_latest: w.latest }))),
     token: renewedToken,
   });
 }));
@@ -1325,13 +1332,17 @@ async function wallPosts(owner, viewer) {
   }));
 }
 
+// New posts by other people since you last opened your profile: how many,
+// who (latest first, up to three names) and the newest post's id, so the
+// page can tell "something new" from "the same thing again".
 async function wallUnread(user) {
-  const { rows: [r] } = await query(
-    `SELECT COUNT(*)::int AS n FROM wall_posts
-      WHERE owner_id = $1 AND author_id <> $1 AND created_at > COALESCE($2, '-infinity'::timestamptz)`,
+  const { rows } = await query(
+    `SELECT w.id, a.username FROM wall_posts w JOIN users a ON a.id = w.author_id
+      WHERE w.owner_id = $1 AND w.author_id <> $1 AND w.created_at > COALESCE($2, '-infinity'::timestamptz)
+      ORDER BY w.created_at DESC, w.id DESC LIMIT 50`,
     [user.id, user.wall_seen_at || null],
   );
-  return r.n;
+  return { n: rows.length, from: [...new Set(rows.map((r) => r.username))].slice(0, 3), latest: rows.length ? rows[0].id : null };
 }
 
 // Plain text only: no control characters, at most two newlines in a row,

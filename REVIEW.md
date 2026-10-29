@@ -681,10 +681,18 @@ yet.
 
 ## Tighter share card, finding your profile, deck look-back, admin switches
 
-**Share card**, now four lines at most and no commentary:
-`Trickle Down #12 · +$18K` / `📈 NVDA +34% · 👍 TSLA +12% 🎢 · 🤕 DOGE −12%` /
-`🎲 KO $30K · BTC $15K` / the link. Every trade gets its tier's emoji
-(🚀 🔥 📈 👍 🪙 / 🩹 🤕 🌊 🤡 💀); 🎢 marks a ride.
+**Share card**, a few labelled lines and no commentary:
+`Trickle Down · Day 9 · +$18K` / `Sold: 📈 NVDA +34% · 🤕 DOGE −12%` /
+`Riding: 👍 TSLA +12%` / `Bought: KO $30K · BTC $15K` / the link. Day N is
+how many days the account has been going (`account_day` on the user, game
+time zone; an admin reset restarts it). Every trade gets its tier's emoji
+(🚀 🔥 📈 👍 🪙 / 🩹 🤕 🌊 🤡 💀).
+
+**Wall alerts**: /me now says who wrote (`wall_unread_from`) and the newest
+post's id (`wall_latest`). A new post gets one quiet toast (remembered per
+browser by that id, so reloads don't repeat it), a to-do line ("erin wrote
+on your wall. Read it", which opens your profile at the wall), and the red
+dot on your avatar. The line and dot go once you've looked.
 
 **Your profile** has three doors now: your avatar in the masthead (it carries
 the red "new on your wall" dot), "Your profile" at the top of ☰ in so many
