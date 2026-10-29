@@ -53,15 +53,23 @@ function sim({ build, side, days = 45, friends = 3, allowance = 100 }) {
   const t = Town.fresh();
   let cash = allowance;
   const dealt = [];
+  // A rough model for the balance check: the day's money (a $150K
+  // allowance plus the town's profit) is invested, and wins pay about 1.7%
+  // of it in tax, hired at the town's lobbyist price.
+  let payroll = 0, extra = 0;
+  const perDay = [];
   for (let d = 1; d <= days; d++) {
     const ctx = { day: day(d), uid: 7, unlocked: true, cash, lobbyists: 5 + d, friends, streak: d };
     const r = Town.tick(t, ctx);
-    assert(Number.isFinite(t.happiness) && Number.isFinite(t.health) && Number.isFinite(Town.income(t)), 'NaN in meters');
-    assert(t.happiness >= 0 && t.happiness <= 100 && t.health >= 0 && t.health <= 100, 'meters out of range');
+    payroll += (0.017 * Math.max(0, 150 + (r.report.income || 0))) / Town.hireCost(t);
+    extra += r.report.income || 0;
+    assert(Number.isFinite(t.happiness) && Number.isFinite(Town.income(t)), 'NaN in meters');
+    assert(t.happiness >= 0 && t.happiness <= 100 && !('health' in t), 'meters out of range');
     cash += allowance + (r.report ? r.report.income : 0);
     if (d === 1) { assert(!Town.build(t, 'housing', build[0], cash, ctx.day).error); assert(!Town.build(t, 'square', build[1], cash, ctx.day).error); }
-    assert.strictEqual(t.issues.length, 2, 'two cards a day');
-    assert.notStrictEqual(t.issues[0].id, t.issues[1].id, 'the same card dealt twice in one day');
+    assert(t.issues.length >= 2 && t.issues.length <= 1 + Town.MAX_TOWN_CARDS, `${t.issues.length} cards on day ${d}`);
+    assert.strictEqual(new Set(t.issues.map((i) => i.id)).size, t.issues.length, 'the same card dealt twice in one day');
+    perDay.push(t.issues.length);
     for (const i of t.issues) {
       dealt.push({ id: i.id, day: d });
       const res = Town.decide(t, i.id, typeof side === 'function' ? side(i) : side, cash);
@@ -70,7 +78,7 @@ function sim({ build, side, days = 45, friends = 3, allowance = 100 }) {
     }
     cash = Math.min(cash, 250);
   }
-  return { t, dealt, cash };
+  return { t, dealt, cash, payroll: Math.round(payroll * 10) / 10, extra: Math.round(extra), perDay };
 }
 
 const nice = sim({ build: ['coop', 'clinic'], side: 'dolores' });
@@ -102,22 +110,58 @@ ok('emergent cards wait a week before returning');
 
 // Unplayed cards go first: in 45 days a player sees most of what they've unlocked.
 assert(new Set(nice.dealt.map((x) => x.id)).size >= 40, 'too few distinct cards in 45 days');
-ok(`${new Set(nice.dealt.map((x) => x.id)).size} distinct cards in 45 days of a decent town`);
+ok(`${new Set(nice.dealt.map((x) => x.id)).size} distinct cards in 45 days of a decent town; ${Math.min(...nice.perDay)}–${Math.max(...nice.perDay)} a day, ${(nice.perDay.reduce((a, b) => a + b, 0) / nice.perDay.length).toFixed(1)} on average`);
+
+// Unlock something during the day and its card joins today's agenda.
+{
+  const t = Town.fresh();
+  const ctx = { day: '2026-11-01', uid: 9, unlocked: true, cash: 100, lobbyists: 3, friends: 0, streak: 1 };
+  Town.tick(t, ctx);
+  const before = t.issues.length;
+  assert.deepStrictEqual(Town.dealNewUnlocks(t, ctx), [], 'nothing new yet');
+  Town.build(t, 'square', 'casino', 100, ctx.day);
+  const dealt = Town.dealNewUnlocks(t, ctx);
+  assert(dealt.includes('high_roller'), `building the casino deals its card today (got ${dealt})`);
+  assert.strictEqual(t.issues.length, before + dealt.length);
+  assert.deepStrictEqual(Town.dealNewUnlocks(t, ctx), [], 'and only once');
+  const friendsNow = Town.dealNewUnlocks(t, { ...ctx, friends: 1 });
+  assert(friendsNow.length >= 1, 'a new friend deals the friends card today');
+  assert(!Town.dealNewUnlocks(t, { ...ctx, friends: 1, cash: 500 }).length, 'cash cards wait for dawn');
+  const all = Town.dealAllUnlocked(t, ctx);
+  assert(all.every((id) => t.issues.some((i) => i.id === id)), 'admin deal-all puts them on the agenda');
+  ok(`same-day unlocks: the casino deals "${dealt.join(', ')}"; a friend deals ${friendsNow.length}; cash cards wait for dawn`);
+}
 
 // --- Balance: no pure strategy dominates ----------------------------------------
 assert(Town.hireCost(nice.t) < Town.hireCost(mixed.t) && Town.hireCost(mixed.t) < Town.hireCost(mean.t), 'happier towns should hire cheaper');
-assert(Town.quitRate(mean.t) > 0 && Town.quitRate(nice.t) === 0 && Town.quitRate(mixed.t) === 0, 'only the extractive town should bleed lobbyists');
 assert(Town.income(mean.t) > Town.income(mixed.t) && Town.income(mixed.t) > Town.income(nice.t), 'extraction should pay the most per day');
-ok(`extract: +$${Town.income(mean.t)}/day at $${Town.hireCost(mean.t)}/head, ${Math.round(Town.quitRate(mean.t) * 100)}% quit; ` +
+ok(`extract: +$${Town.income(mean.t)}/day at $${Town.hireCost(mean.t)}/head; ` +
    `mixed: +$${Town.income(mixed.t)}/day at $${Town.hireCost(mixed.t)}; nice: $${Town.income(nice.t)}/day at $${Town.hireCost(nice.t)}`);
+// The trade the buildings offer: extraction pays you, decency staffs the charity.
+assert(mean.extra > mixed.extra && mixed.extra > nice.extra, 'extraction should earn the most allowance over 45 days');
+assert(nice.payroll > mixed.payroll && mixed.payroll > mean.payroll, 'decent towns should hire the most lobbyists');
+// ...but not so many more that the money stops mattering, or so few that it's no contest.
+const edge = nice.payroll / mean.payroll;
+assert(edge > 1.15 && edge < 1.8, `decent vs extractive lobbyists ${edge.toFixed(2)}x: out of balance`);
+ok(`45 days: extract earns $${mean.extra}K extra allowance and hires ${mean.payroll} lobbyists; ` +
+   `mixed $${mixed.extra}K / ${mixed.payroll}; nice $${nice.extra}K / ${nice.payroll} (${edge.toFixed(2)}x extract)`);
+for (const f of new Set(Town.ISSUES.filter((i) => i.needs && i.needs.flag).map((i) => i.needs.flag))) assert(Town.LATER[f], `no "later" tone for ${f}`);
+ok('every choice that leads to a follow-up says whether it tends to go well, badly, or either way');
+// Every choice has something going for it.
+for (const i of Town.ISSUES) for (const who of ['preston', 'dolores']) {
+  const fx = i[who].fx;
+  assert(!('health' in fx) && (fx.cash > 0 || fx.income > 0 || fx.happy > 0), `${i.id}: ${who}'s side has no upside`);
+}
+ok('every side of every card has a visible upside');
 
 // --- Old saves ------------------------------------------------------------------
 const old = { v: 4, day: '2026-10-30', happiness: 50, health: 60, perks: 0, plots: { housing: 'tenement', square: null }, upgrades: { housing: [], square: [] }, built: { housing: '2026-10-28', square: null }, issues: [], report: null, played: ['strike'], flags: [] };
 Town.tick(old, { day: '2026-10-31', uid: 3, unlocked: true, cash: 100, lobbyists: 3 });
-assert(old.last && old.issues.length === 2, 'old save did not migrate');
+assert(old.last && old.issues.length >= 2, 'old save did not migrate');
 const older = { day: '2026-10-30', happiness: 50, health: 60, plots: { housing: null, square: null }, issues: [] };
 Town.tick(older, { day: '2026-10-31', uid: 3, unlocked: true, cash: 100, lobbyists: 3 });
 assert(older.upgrades && older.played && older.flags && older.last && older.built, 'oldest save did not migrate');
+assert(!('health' in old) && !('health' in older), 'old saves drop health');
 ok('old saves migrate');
 
 // --- Ride math (src/game.js) -----------------------------------------------------
@@ -169,6 +213,18 @@ ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
   const dealt = Town.decide(t2, 'audit_return', 'dolores', 1000);
   assert(!dealt.error, `dealt card can be played: ${dealt.error}`);
   ok('13 cards unlock by days played; admin can unlock, deal, and open the whole deck');
+}
+
+// --- A display step of grace: $29.97K buys a $30K building ---------------------
+{
+  const t = Town.fresh();
+  assert.strictEqual(Town.build(t, 'square', 'casino', 29.97, '2026-11-01').cash, -29.97, 'within a display step: takes what is there');
+  const t2 = Town.fresh();
+  assert(Town.build(t2, 'square', 'casino', 29.8, '2026-11-01').error, '$0.2K short is short');
+  const t3 = Town.fresh();
+  assert.strictEqual(Town.build(t3, 'square', 'casino', 45, '2026-11-01').cash, -30, 'enough: pays the price');
+  assert(Town.canPay(29.95, 30) && !Town.canPay(29.85, 30));
+  ok('$29.97K buys a $30K building (charged $29.97K); $29.8K does not');
 }
 
 // --- The front end has the same file ------------------------------------------
