@@ -356,7 +356,7 @@
   }
 
   function fresh() {
-    return { v: 5, day: null, happiness: 55, perks: 0, plots: { housing: null, square: null }, upgrades: { housing: [], square: [] }, built: { housing: null, square: null }, issues: [], report: null, played: [], flags: [], last: {}, days: 0, admin_open: [], sides: { preston: 0, dolores: 0 } };
+    return { v: 5, day: null, happiness: 55, perks: 0, plots: { housing: null, square: null }, upgrades: { housing: [], square: [] }, built: { housing: null, square: null }, issues: [], report: null, played: [], flags: [], last: {}, days: 0, admin_open: [], sides: { preston: 0, dolores: 0 }, choices: {} };
   }
   function migrate(t) {
     if (!t.upgrades) t.upgrades = { housing: [], square: [] };
@@ -364,7 +364,11 @@
     if (!t.flags) t.flags = [];
     if (!t.last) t.last = {};
     if (t.days == null) t.days = t.day ? 1 : 0;        // days the village has been visited
-    if (!t.admin_open) t.admin_open = [];               // card ids an admin forced open ('*' = all)
+    if (!t.admin_open) t.admin_open = [];               // card ids an admin forced open, one by one
+    // Admin switches, each reversible: every card open; every open card dealt, daily.
+    if (t.admin_open.includes('*')) { t.admin_all_open = true; t.admin_open = t.admin_open.filter((id) => id !== '*'); }
+    if (t.admin_all_open == null) t.admin_all_open = false;
+    if (t.admin_deal_all == null) t.admin_deal_all = false;
     if (!t.built) t.built = { housing: t.plots.housing ? t.day : null, square: t.plots.square ? t.day : null };
     if ('health' in t) delete t.health;                 // health was cut: two scores now
     // Cards played per side, for the profile. Counting started with profiles;
@@ -372,6 +376,11 @@
     if (!t.sides) {
       t.sides = { preston: 0, dolores: 0 };
       for (const i of t.issues || []) if (i.chosen === 'preston' || i.chosen === 'dolores') t.sides[i.chosen] += 1;
+    }
+    // Which side you took on each card, last time you played it, for the deck.
+    if (!t.choices) {
+      t.choices = {};
+      for (const i of t.issues || []) if (i.chosen) t.choices[i.id] = { side: i.chosen, day: t.day };
     }
     return t;
   }
@@ -421,7 +430,7 @@
 
   // --- Cards and what unlocks them ---------------------------------------------
 
-  const adminOpen = (t, id) => !!t.admin_open && (t.admin_open.includes('*') || t.admin_open.includes(id));
+  const adminOpen = (t, id) => !!t.admin_all_open || (!!t.admin_open && (t.admin_open.includes('*') || t.admin_open.includes(id)));
 
   function needsMet(needs, t, ctx, slot = null) {
     if (!needs) return true;
@@ -520,6 +529,7 @@
     const today = new Set(t.issues.map((i) => i.id));
     const fresh = now.filter((id) => !seen.has(id) && !played.has(id) && !today.has(id) && midday(BY_ID.get(id).needs));
     for (const id of fresh) t.issues.push({ id, chosen: null });
+    if (t.admin_deal_all) fresh.push(...dealAllUnlocked(t, ctx));
     t.unlock_seen = now;
     return fresh;
   }
@@ -578,6 +588,7 @@
     migrate(t);
     if (!ctx.unlocked || t.day !== ctx.day || (t.issues && t.issues.length)) return false;
     t.issues = pickIssues(t, ctx);
+    if (t.admin_deal_all) dealAllUnlocked(t, ctx);
     t.unlock_seen = unlockedCards(t, ctx).map((i) => i.id);
     return true;
   }
@@ -600,9 +611,49 @@
   // today's agenda right now, locked or not.
   function adminUnlock(t, ids) {
     migrate(t);
-    const list = ids === '*' ? ['*'] : [].concat(ids).filter((id) => BY_ID.has(id));
+    if (ids === '*') { t.admin_all_open = true; return { unlocked: 1 }; }
+    const list = [].concat(ids).filter((id) => BY_ID.has(id));
     for (const id of list) if (!t.admin_open.includes(id)) t.admin_open.push(id);
     return { unlocked: list.length };
+  }
+
+  // Admin (testing): the two switches, on or off. Turning them off undoes
+  // them as far as it can without rewriting history:
+  //   unlockAll off  the deck goes back to what this town has earned. Cards
+  //                  you've already played stay open (and played); today's
+  //                  unplayed cards that are locked again leave the agenda.
+  //   dealAll off    today's hand goes back to a normal day's deal. Cards
+  //                  you've played today stay; the rest is what the day
+  //                  would have dealt.
+  function adminSwitch(t, ctx, { unlockAll, dealAll } = {}) {
+    migrate(t);
+    if (!t.issues) t.issues = [];
+    const today = ctx.day;
+    if (unlockAll != null && !!unlockAll !== t.admin_all_open) {
+      t.admin_all_open = !!unlockAll;
+      if (!unlockAll) {
+        const played = new Set(t.played || []);
+        for (const i of ISSUES) if (played.has(i.id) && !needsMet(i.needs, t, ctx) && !t.admin_open.includes(i.id)) t.admin_open.push(i.id);
+        const open = new Set(unlockedCards(t, ctx).map((i) => i.id));
+        t.issues = t.issues.filter((s) => s.chosen || open.has(s.id));
+      }
+      if (unlockAll && t.admin_deal_all && t.day === today) dealAllUnlocked(t, ctx);
+      t.unlock_seen = unlockedCards(t, ctx).map((i) => i.id);
+    }
+    if (dealAll != null && !!dealAll !== t.admin_deal_all) {
+      t.admin_deal_all = !!dealAll;
+      if (t.day === today) {
+        if (dealAll) dealAllUnlocked(t, ctx);
+        else {
+          const before = (t.played || []).filter((id) => (t.last || {})[id] !== today);
+          const natural = pickIssues({ ...t, played: before }, ctx);
+          const kept = t.issues.filter((s) => s.chosen);
+          const have = new Set(kept.map((s) => s.id));
+          t.issues = [...kept, ...natural.filter((s) => !have.has(s.id))];
+        }
+      }
+    }
+    return { unlock_all: t.admin_all_open, deal_all: t.admin_deal_all };
   }
   function deal(t, issueId) {
     migrate(t);
@@ -628,6 +679,7 @@
     applyFx(t, fx);
     slot.chosen = side;
     t.sides[side] = (t.sides[side] || 0) + 1;
+    t.choices[issueId] = { side, day: t.day };
     if (!t.played.includes(issueId)) t.played.push(issueId);
     t.last[issueId] = t.day;
     const sets = BY_ID.get(issueId)[side].sets || null;
@@ -752,10 +804,14 @@
       deck: ISSUES.map((i) => {
         const slot = (t.issues || []).find((s) => s.id === i.id);
         const status = slot ? (slot.chosen ? 'played' : 'today') : (needsMet(i.needs, t, ctx) || adminOpen(t, i.id)) ? 'available' : 'locked';
-        return { id: i.id, title: i.title, general: !i.needs, status, needs: needsText(i.needs, t, ctx), seen: t.played.includes(i.id), consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), forced: adminOpen(t, i.id) };
+        const seen = t.played.includes(i.id);
+        return { id: i.id, title: i.title, general: !i.needs, status, needs: needsText(i.needs, t, ctx), seen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), forced: adminOpen(t, i.id),
+          // What you chose last time, for the deck's look-back. (Older towns
+          // know that a card was played, and when, but not which side.)
+          choice: seen || status === 'played' ? (t.choices[i.id] || null) : null, last: seen ? (t.last[i.id] || null) : null };
       }),
     };
   }
 
-  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, view, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST };
+  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, view, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch };
 }));

@@ -475,7 +475,8 @@ router.post('/admin/reset', auth.requireUser, requireAdmin, RL.admin, wrap(async
 async function adminTown(req, res, act) {
   const body = req.body || {};
   const target = body.username ? await findPlayer(body.username) : req.user;
-  if (!target) return res.status(404).json({ error: 'No player by that name.' });
+  // On an error this answers and returns null, so callers stop at `if (!out) return`.
+  if (!target) { res.status(404).json({ error: 'No player by that name.' }); return null; }
   const today = game.dayKey();
   const result = await withTx(async (tx) => {
     const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [target.id]);
@@ -486,7 +487,7 @@ async function adminTown(req, res, act) {
     const { rows: [u2] } = await tx.query('UPDATE users SET town = $1 WHERE id = $2 RETURNING *', [town, u.id]);
     return { user: u2, r };
   });
-  if (result.error) return res.status(400).json({ error: result.error });
+  if (result.error) { res.status(400).json({ error: result.error }); return null; }
   result.user.friend_count = await friendCount(result.user.id);
   return { target, user: result.user, r: result.r };
 }
@@ -504,6 +505,30 @@ router.post('/admin/unlock', auth.requireUser, requireAdmin, RL.admin, wrap(asyn
   if (!out) return;
   console.log(`[admin] ${req.user.username} unlocked ${ids === '*' ? 'every card' : ids.join(', ')} for ${out.target.username}`);
   res.json({ ok: true, unlocked: out.r.unlocked, user: publicUser(out.user), town: townView(out.user) });
+}));
+
+// The two reversible switches: every card unlocked; every unlocked card dealt
+// daily. GET reads them for the admin panel; POST flips either or both.
+router.get('/admin/switches', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const target = req.query.username ? await findPlayer(req.query.username) : req.user;
+  if (!target) return res.status(404).json({ error: 'No player by that name.' });
+  const town = target.town ? Town.migrate(target.town) : Town.fresh();
+  res.json({ username: target.username, unlock_all: !!town.admin_all_open, deal_all: !!town.admin_deal_all });
+}));
+router.post('/admin/switches', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const body = req.body || {};
+  const want = {};
+  if (typeof body.unlock_all === 'boolean') want.unlockAll = body.unlock_all;
+  if (typeof body.deal_all === 'boolean') want.dealAll = body.deal_all;
+  if (!Object.keys(want).length) return res.status(400).json({ error: 'Send unlock_all and/or deal_all as true or false.' });
+  const out = await adminTown(req, res, (town, u, today) => {
+    const ctxNow = townCtx(u, { day: today });
+    if (town.day === today && Town.isUnlocked(u.total_donated)) Town.ensureIssues(town, ctxNow);
+    return Town.adminSwitch(town, ctxNow, want);
+  });
+  if (!out) return;
+  console.log(`[admin] ${req.user.username} set ${JSON.stringify(out.r)} for ${out.target.username}`);
+  res.json({ ok: true, ...out.r, user: publicUser(out.user), town: townView(out.user) });
 }));
 
 router.post('/admin/deal', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {

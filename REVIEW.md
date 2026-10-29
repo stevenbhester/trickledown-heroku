@@ -679,6 +679,35 @@ and an `apple-touch-icon.png`. The preview is the same for everyone: a
 per-player preview would need the server to render images, which it can't
 yet.
 
+## Tighter share card, finding your profile, deck look-back, admin switches
+
+**Share card**, now four lines at most and no commentary:
+`Trickle Down #12 · +$18K` / `📈 NVDA +34% · 👍 TSLA +12% 🎢 · 🤕 DOGE −12%` /
+`🎲 KO $30K · BTC $15K` / the link. Every trade gets its tier's emoji
+(🚀 🔥 📈 👍 🪙 / 🩹 🤕 🌊 🤡 💀); 🎢 marks a ride.
+
+**Your profile** has three doors now: your avatar in the masthead (it carries
+the red "new on your wall" dot), "Your profile" at the top of ☰ in so many
+words, and "My profile & trading history" next to Share on Today. On narrow
+phones the countdown shortens to "Refill in 6h" (and hides under 340px) so
+the masthead still fits.
+
+**The deck**: any card you've played opens to the situation, both pitches,
+and which one you took and when. New state: `town.choices` (card → side,
+day), recorded by `decide`; the card text comes from the rules file the
+page already has. Cards played before this shipped show the situation and
+both sides, and say the pick wasn't recorded then.
+
+**Admin switches**: "Unlock every card" and "Deal every unlocked card" are
+checkboxes now (`town.admin_all_open`, `town.admin_deal_all`; GET/POST
+/admin/switches), aimed at you or the named player. Unticking unlock-all
+returns the deck to what the town has earned; anything already played stays
+open, and today's unplayed cards that lock again leave the agenda. Unticking
+deal-all puts today back to a normal day's hand, keeping what's been played.
+A town that used the old one-way "unlock everything" reads as the switch
+being on. Also fixed: the admin card routes kept running after an error
+reply (a "No player by that name" would throw on the way out).
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored
