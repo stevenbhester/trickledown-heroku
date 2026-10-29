@@ -654,6 +654,31 @@ Character Building and Seven Figures, 10% for Legendary and Power Broker,
 money in play after tax. Power Broker is now 500 lobbyists (about three weeks).
 `scripts/test-town.js` checks the amounts.
 
+## Share card, loss tiers, link previews
+
+**Loss tiers.** Losses had one name, Paper cut, from −0.01% to −99%. They now
+mirror the gain ladder: Paper cut (under −10%), Flesh wound (−10 to −25%),
+Taking on water (−25 to −50%), Comically disastrous (−50% or worse), Rest in
+peace (zero). `tierFor` in `src/game.js`; old receipts keep the name they
+were given. Checked in `scripts/test-town.js`.
+
+**Share my day** (front end only). Was a list of open positions, lobbyists
+and a streak. Now a short card previewed in a sheet, with Share (phones) and
+Copy: an opening line set by the day's combined result ("On a heater. Please
+clap." … "Comically disastrous. Truly something to see."), then "Trickle Down
+· Day N · +$18K", each position cashed out or let ride today with its % and
+$ and a tier emoji (🚀🔥📈🪙 / 🩹🤕🌊🤡💀, 🎢 for a ride), today's new buys,
+and the link. No achievements, gifts or lobbyists. Days with only buys say
+so ("All in on AAPL. See you in 24 hours.").
+
+**Link previews.** The page had a title and a description and nothing else,
+so Slack and iMessage showed a bare link. Now: Open Graph and Twitter card
+tags, a 1200×630 `og.jpg` (the wordmark, "Fake money. Real stocks. Real
+charity.", and the real coin from demo mode, rendered with the real fonts),
+and an `apple-touch-icon.png`. The preview is the same for everyone: a
+per-player preview would need the server to render images, which it can't
+yet.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

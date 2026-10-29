@@ -243,6 +243,20 @@ ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
   ok('gifts: floors early, a share of money in play later, rounded like a check');
 }
 
+// --- Outcome names: the loss ladder mirrors the gain ladder ---------------------
+{
+  const game = require('../src/game');
+  const t = (pct) => game.tierFor({ invested: 100, value: 100 * (1 + pct) });
+  assert.deepStrictEqual([-1, -0.7, -0.5, -0.3, -0.12, -0.05, 0.05, 0.12, 0.3, 0.7, 1.2].map(t),
+    ['Rest in peace', 'Comically disastrous', 'Comically disastrous', 'Taking on water', 'Flesh wound', 'Paper cut',
+      'Pocket change', 'Respectable', 'Nice', 'Heater', 'Legend']);
+  // The share card's copy in the front end must agree.
+  const appPath = path.join(__dirname, '../../trickledown-stevenhester-com/js/app.js');
+  const app = fs.existsSync(appPath) ? fs.readFileSync(appPath, 'utf8') : '';
+  if (app) for (const name of ['Comically disastrous', 'Taking on water', 'Flesh wound', 'Paper cut']) assert.ok(app.includes(`'${name}'`), `app.js knows ${name}`);
+  ok('loss tiers: Paper cut, Flesh wound, Taking on water, Comically disastrous, Rest in peace');
+}
+
 // --- The front end has the same file ------------------------------------------
 const fe = path.join(__dirname, '../../trickledown-stevenhester-com/js/town.js');
 if (fs.existsSync(fe)) {

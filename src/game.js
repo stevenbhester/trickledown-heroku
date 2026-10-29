@@ -101,6 +101,10 @@ function valueOf(p, price, at = Date.now()) {
 function tierFor({ invested, value }) {
   if (value <= 0) return 'Rest in peace';
   const pct = (value - invested) / invested;
+  // Losses get the same ladder as gains, in the other direction.
+  if (pct <= -0.5) return 'Comically disastrous';
+  if (pct <= -0.25) return 'Taking on water';
+  if (pct <= -0.1) return 'Flesh wound';
   if (pct < 0) return 'Paper cut';
   if (pct < 0.10) return 'Pocket change';
   if (pct < 0.25) return 'Respectable';
