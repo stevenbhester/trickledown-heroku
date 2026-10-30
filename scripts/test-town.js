@@ -411,6 +411,36 @@ ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
   ok('expired_yesterday counts yesterday\'s unplayed cards');
 }
 
+// --- Passing on an upgrade -----------------------------------------------------
+{
+  const t = Town.fresh(); t.day = '2026-10-30';
+  Town.build(t, 'housing', 'tenement', 100, '2026-10-26');
+  const c = { day: '2026-10-30', cash: 100, lobbyists: 1 };
+  const plot = () => Town.view(t, c).plots.find((p) => p.slot === 'housing');
+  const before = plot().proposals;
+  const up = plot().building.upgrades.find((u) => u.status === 'available');
+  assert(before > 0 && up, 'a tenement four days old has an upgrade on the table');
+  const r = Town.passUpgrade(t, 'housing', up.key, c);
+  assert(r.ok && (r.who === 'preston' || r.who === 'dolores') && r.who !== up.pitch.who, 'passing sides with the objector');
+  assert.strictEqual(plot().proposals, before - 1, 'a passed upgrade stops counting as waiting');
+  assert(plot().building.upgrades.find((u) => u.key === up.key).passed, 'and shows as passed');
+  assert(!Town.upgrade(t, 'housing', up.key, 100, c).error, 'a passed upgrade can still be bought');
+  assert(!t.passed.housing.includes(up.key) && !plot().building.upgrades.find((u) => u.key === up.key).passed, 'buying clears the pass');
+  assert(Town.passUpgrade(t, 'housing', up.key, c).error, 'cannot pass on one you own');
+  for (const bad of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    assert(Town.passUpgrade(t, 'housing', bad, c).error && Town.upgrade(t, 'housing', bad, 100, c).error, `key ${bad} is refused`);
+    assert(Town.passUpgrade(t, bad, 'boiler', c).error && Town.upgrade(t, bad, 'boiler', 100, c).error && Town.build(t, bad, 'tenement', 100).error && Town.build(t, 'housing', bad, 100).error, `slot/building ${bad} is refused`);
+  }
+  assert(Number.isFinite(Town.view(t, c).income), 'income stays a number');
+  const locked = plot().building.upgrades.find((u) => u.status === 'locked');
+  if (locked) assert(Town.passUpgrade(t, 'housing', locked.key, c).error, 'cannot pass on a locked upgrade');
+  const t2 = Town.fresh(); t2.day = '2026-10-30'; Town.build(t2, 'housing', 'tenement', 100, '2026-10-26');
+  const k2 = Town.view(t2, c).plots[0].building.upgrades.find((u) => u.status === 'available').key;
+  Town.passUpgrade(t2, 'housing', k2, c); Town.build(t2, 'housing', Object.keys(Town.PLOTS.housing.options).find((k) => k !== 'tenement'), 100);
+  assert.deepStrictEqual(t2.passed.housing, [], 'a new building starts with no passes');
+  ok('passing on an upgrade: clears the nag, stays buyable, odd keys refused');
+}
+
 // --- The front end has the same file ------------------------------------------
 const fe = path.join(__dirname, '../../trickledown-stevenhester-com/js/town.js');
 if (fs.existsSync(fe)) {

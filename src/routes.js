@@ -246,7 +246,7 @@ function dayInfo(now = new Date()) {
 // The page checks this so a half-finished deploy (new page, old server) is
 // caught on sight instead of showing up as missing features. Bump it with any
 // release the page depends on; js/app.js API_WANTS must match.
-const API_VERSION = 14;
+const API_VERSION = 15;
 
 router.get('/health', (req, res) => res.json({ ok: true, api: API_VERSION, provider: cfg.priceProvider, google: google.enabled(), demo: cfg.demoMode }));
 
@@ -1262,9 +1262,9 @@ router.post('/town/upgrade', auth.requireUser, wrap(async (req, res) => {
     const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
     if (!Town.isUnlocked(u.total_donated)) return { error: 'TrickleTown opens when you hire your first full lobbyist.' };
     const town = u.town || Town.fresh();
+    u.friend_count = await friendCount(u.id, tx);
     const r = Town.upgrade(town, String(slot || ''), String(key || ''), u.cash, townCtx(u, { day: game.dayKey() }));
     if (r.error) return r;
-    u.friend_count = await friendCount(u.id, tx);
     const dealt = Town.dealNewUnlocks(town, townCtx(u, { day: game.dayKey() }));
     const { rows: [u2] } = await tx.query(
       'UPDATE users SET cash = cash + $1, town = $2 WHERE id = $3 RETURNING *', [r.cash, town, u.id],
@@ -1275,6 +1275,25 @@ router.post('/town/upgrade', auth.requireUser, wrap(async (req, res) => {
   if (result.error) return res.status(400).json({ error: result.error });
   result.user.friend_count = await friendCount(result.user.id);
   res.json({ ok: true, user: publicUser(result.user), town: townView(result.user), fresh_cards: result.dealt.map((id) => (Town.ISSUES.find((i) => i.id === id) || {}).title).filter(Boolean) });
+}));
+
+// Side with the objector on an upgrade: nothing is bought, it stops counting
+// as waiting, and it stays in the shop marked passed.
+router.post('/town/upgrade/pass', auth.requireUser, RL.trade, wrap(async (req, res) => {
+  const { slot, key } = req.body || {};
+  const result = await withTx(async (tx) => {
+    const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    if (!Town.isUnlocked(u.total_donated)) return { error: 'TrickleTown opens when you hire your first full lobbyist.' };
+    const town = u.town || Town.fresh();
+    u.friend_count = await friendCount(u.id, tx);
+    const r = Town.passUpgrade(town, String(slot || '').slice(0, 20), String(key || '').slice(0, 40), townCtx(u, { day: game.dayKey() }));
+    if (r.error) return r;
+    const { rows: [u2] } = await tx.query('UPDATE users SET town = $1 WHERE id = $2 RETURNING *', [town, u.id]);
+    return { user: u2, who: r.who };
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  result.user.friend_count = await friendCount(result.user.id);
+  res.json({ ok: true, who: result.who, user: publicUser(result.user), town: townView(result.user) });
 }));
 
 // --- Lobbyists: where this quarter's go, and where new ones go ---------------------
@@ -1464,17 +1483,11 @@ router.get('/admin/overview', auth.requireUser, requireAdmin, RL.admin, wrap(asy
 // Every transaction, newest first: buys, rides, sales and collections, gifts,
 // plus the ledger (allowance, town, cat, grants, lobbyist moves). Paged by
 // time: pass the last row's "at" as ?before= for the next page.
-router.get('/admin/transactions', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
-  const limit = Math.max(10, Math.min(300, Number(req.query.limit) || 150));
-  // Exact paging: the cursor is the last row's time to the microsecond plus
-  // its ref, so rows sharing a timestamp are neither skipped nor repeated.
-  const cur = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z)~([pcl]\d{1,10})$/.exec(String(req.query.cursor || ''));
-  const before = cur ? cur[1] : new Date(Date.now() + 60e3).toISOString();
-  const beforeRef = cur ? cur[2] : '~';
-  const who = req.query.username ? await findPlayer(String(req.query.username)) : null;
-  if (req.query.username && !who) return res.status(404).json({ error: 'No player by that name.' });
-  const { rows } = await query(
-    `SELECT t.*, u.username, to_char(t.at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at_key FROM (
+// Every money (and lobbyist) movement, one row each: buys and rides from
+// positions as they open, sells/collects/burials/gifts as they close, and the
+// ledger table for everything outside a position. The admin feed and each
+// player's own ledger read the same rows.
+const MONEY_FEED = `
        SELECT p.opened_at AS at, p.user_id, CASE WHEN p.rolled_from IS NOT NULL THEN 'ride' ELSE 'buy' END AS kind,
               p.symbol AS what, CASE WHEN p.rolled_from IS NOT NULL THEN NULL ELSE -p.invested END AS cash,
               p.invested AS amount, NULL::numeric AS profit, NULL::numeric AS tax, NULL::numeric AS lobbyists, NULL::text AS charity,
@@ -1493,7 +1506,21 @@ router.get('/admin/transactions', auth.requireUser, requireAdmin, RL.admin, wrap
         WHERE p.closed_at IS NOT NULL
        UNION ALL
        SELECT l.created_at, l.user_id, l.kind, '', l.amount, ABS(l.amount), NULL, NULL, NULLIF(l.lobbyists, 0), NULL, l.detail, 'l' || l.id
-         FROM ledger l
+         FROM ledger l`;
+const FEED_CURSOR = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z)~([pcl]\d{1,10})$/;
+
+router.get('/admin/transactions', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const limit = Math.max(10, Math.min(300, Number(req.query.limit) || 150));
+  // Exact paging: the cursor is the last row's time to the microsecond plus
+  // its ref, so rows sharing a timestamp are neither skipped nor repeated.
+  const cur = FEED_CURSOR.exec(String(req.query.cursor || ''));
+  const before = cur ? cur[1] : new Date(Date.now() + 60e3).toISOString();
+  const beforeRef = cur ? cur[2] : '~';
+  const who = req.query.username ? await findPlayer(String(req.query.username)) : null;
+  if (req.query.username && !who) return res.status(404).json({ error: 'No player by that name.' });
+  const { rows } = await query(
+    `SELECT t.*, u.username, to_char(t.at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at_key FROM (
+${MONEY_FEED}
      ) t JOIN users u ON u.id = t.user_id
      WHERE t.at <= $1::timestamptz AND (t.at, t.ref) < ($1::timestamptz, $4::text) AND ($2::int IS NULL OR t.user_id = $2)
      ORDER BY t.at DESC, t.ref DESC LIMIT $3`,
@@ -1502,6 +1529,58 @@ router.get('/admin/transactions', auth.requireUser, requireAdmin, RL.admin, wrap
   const num = (v) => (v == null ? null : game.round2(Number(v)));
   res.json({
     transactions: rows.map((r) => ({ ref: r.ref, undoable: r.ref[0] !== 'l' || Object.hasOwn(LEDGER_UNDO, r.kind), at: r.at, username: r.username, kind: r.kind, what: r.what, cash: num(r.cash), amount: num(r.amount), profit: num(r.profit), tax: num(r.tax), lobbyists: num(r.lobbyists), charity: r.charity, note: r.note })),
+    more: rows.length === limit,
+    cursor: rows.length ? `${rows[rows.length - 1].at_key}~${rows[rows.length - 1].ref}` : null,
+  });
+}));
+
+// Your own ledger: where your cash came from and where it went, newest first.
+// Ledger notes are stored in admin shorthand; this turns them into names.
+function ledgerWords(kind, detail) {
+  const d = String(detail || '');
+  let m;
+  if (kind === 'allowance' && (m = /stipend ([\d.]+)(?:, town ([+-]?[\d.]+))? · streak (\d+)/.exec(d))) return { base: Number(m[1]), town: m[2] ? Number(m[2]) : 0, streak: Number(m[3]) };
+  if (kind === 'card' && (m = /^([a-z0-9_]+) · sided with (Preston|Dolores)/.exec(d))) {
+    const card = Town.ISSUES.find((i) => i.id === m[1]);
+    return { title: card ? Town.catWords(null, card.title) : m[1], side: m[2] };
+  }
+  if ((kind === 'build' || kind === 'upgrade') && (m = /^([a-z0-9_]+) on the ([a-z]+) lot/.exec(d))) {
+    const plot = Town.PLOTS[m[2]];
+    let name = null;
+    if (plot && kind === 'build') name = plot.options[m[1]] && plot.options[m[1]].name;
+    if (plot && kind === 'upgrade') for (const b of Object.values(plot.options)) if (b.upgrades && b.upgrades[m[1]]) name = b.upgrades[m[1]].name;
+    return { title: name || m[1], lot: plot ? plot.label : m[2] };
+  }
+  if (kind === 'cat' && (m = /^([a-z0-9_]+) for the cat/.exec(d))) {
+    const item = Town.CAT_ITEMS.find((x) => x.id === m[1]);
+    return { title: item ? item.name : m[1] };
+  }
+  return {};
+}
+
+router.get('/ledger', auth.requireUser, RL.read, wrap(async (req, res) => {
+  const limit = 60;
+  const cur = FEED_CURSOR.exec(String(req.query.cursor || ''));
+  const before = cur ? cur[1] : new Date(Date.now() + 60e3).toISOString();
+  const beforeRef = cur ? cur[2] : '~';
+  const { rows } = await query(
+    `SELECT t.*, to_char(t.at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at_key FROM (${MONEY_FEED}) t
+      WHERE t.user_id = $2 AND t.kind NOT IN ('ride', 'assign', 'admin remove')
+        AND t.at <= $1::timestamptz AND (t.at, t.ref) < ($1::timestamptz, $4::text)
+      ORDER BY t.at DESC, t.ref DESC LIMIT $3`,
+    [before, req.user.id, limit, beforeRef],
+  );
+  const num = (v) => (v == null ? null : game.round2(Number(v)));
+  const fromLedger = (r) => r.ref[0] === 'l';
+  res.json({
+    cash: num(req.user.cash),
+    rows: rows.map((r) => ({
+      ref: r.ref, at: r.at, kind: r.kind, what: r.what, cash: num(r.cash), amount: num(r.amount), profit: num(r.profit), tax: num(r.tax),
+      lobbyists: num(r.lobbyists), charity: r.charity,
+      // Closes carry their tier, buys their multiplier; admin rows keep their note.
+      note: fromLedger(r) ? (r.kind.startsWith('admin') ? r.note : null) : r.note,
+      ...(fromLedger(r) ? ledgerWords(r.kind, r.note) : {}),
+    })),
     more: rows.length === limit,
     cursor: rows.length ? `${rows[rows.length - 1].at_key}~${rows[rows.length - 1].ref}` : null,
   });

@@ -21,6 +21,8 @@
   else root.TownRules = factory();
 }(typeof self !== 'undefined' ? self : this, function () {
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  // Own keys only: a slot or key of "constructor" or "__proto__" is not a building.
+  const own = (o, k) => o != null && Object.prototype.hasOwnProperty.call(o, k);
   const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
   const BUILD_COST = 40;
@@ -453,6 +455,9 @@
   }
   function migrate(t) {
     if (!t.upgrades) t.upgrades = { housing: [], square: [] };
+    // Upgrades the player sided against in the Site Office: still for sale,
+    // no longer nagging. Cleared when the building comes down.
+    if (!t.passed) t.passed = { housing: [], square: [] };
     if (!t.played) t.played = [];
     if (!t.flags) t.flags = [];
     if (!t.last) t.last = {};
@@ -820,6 +825,7 @@
       if (!canPay(cashAvailable, u.cost)) return { error: `That costs $${u.cost}K and you have ${kStr(cashAvailable)} on the coin.` };
       paid = charge(cashAvailable, u.cost);
       t.upgrades[u.slot].push(card.buys);
+      t.passed[u.slot] = t.passed[u.slot].filter((k) => k !== card.buys);
       fx = { cash: -u.cost, income: u.income || 0, happy: u.happy || 0 };
     } else {
       const cash = cardCost(t, fx);
@@ -842,28 +848,44 @@
 
   function build(t, slot, key, cashAvailable, day = t.day) {
     migrate(t);
-    if (!PLOTS[slot]) return { error: 'No such plot.' };
-    if (!PLOTS[slot].options[key]) return { error: 'No such building.' };
+    if (!own(PLOTS, slot)) return { error: 'No such plot.' };
+    if (!own(PLOTS[slot].options, key)) return { error: 'No such building.' };
     if (t.plots[slot] === key) return { error: "It's already there." };
     const cost = PLOTS[slot].options[key].cost || BUILD_COST;
     if (!canPay(cashAvailable, cost)) return { error: `${PLOTS[slot].options[key].name} costs $${cost}K. You have ${kStr(cashAvailable)} on the coin.` };
     t.plots[slot] = key;
     t.upgrades[slot] = []; // the old building's upgrades go with it
+    t.passed[slot] = [];
     t.built[slot] = day;
     return { cash: charge(cashAvailable, cost) };
   }
 
   function upgrade(t, slot, key, cashAvailable, ctx = {}) {
     migrate(t);
-    const b = PLOTS[slot] && building(slot, t.plots[slot]);
+    const b = own(PLOTS, slot) && building(slot, t.plots[slot]);
     if (!b) return { error: 'Build something there first.' };
-    const u = b.upgrades[key];
+    const u = own(b.upgrades, key) ? b.upgrades[key] : null;
     if (!u) return { error: `${b.name} doesn't offer that.` };
     if (t.upgrades[slot].includes(key)) return { error: 'Already built.' };
     if (!needsMet(u.needs, t, { ...ctx, cash: cashAvailable }, slot)) return { error: `${u.name} isn't on the table yet. ${needsText(u.needs)}` };
     if (!canPay(cashAvailable, u.cost)) return { error: `${u.name} costs $${u.cost}K. You have ${kStr(cashAvailable)} on the coin.` };
     t.upgrades[slot].push(key);
+    t.passed[slot] = t.passed[slot].filter((k) => k !== key);
     return { cash: charge(cashAvailable, u.cost) };
+  }
+
+  // Side with whoever objects to an upgrade: nothing is bought, and it stops
+  // counting as waiting. It stays in the shop, marked passed, for later.
+  function passUpgrade(t, slot, key, ctx = {}) {
+    migrate(t);
+    const b = own(PLOTS, slot) && building(slot, t.plots[slot]);
+    if (!b) return { error: 'Build something there first.' };
+    const u = own(b.upgrades, key) ? b.upgrades[key] : null;
+    if (!u) return { error: `${b.name} doesn't offer that.` };
+    if (t.upgrades[slot].includes(key)) return { error: 'Already built.' };
+    if (!needsMet(u.needs, t, ctx, slot)) return { error: `${u.name} isn't on the table yet.` };
+    if (!t.passed[slot].includes(key)) t.passed[slot].push(key);
+    return { ok: true, who: u.pitch.who === 'preston' ? 'dolores' : 'preston' };
   }
 
   // Direction-and-size hints instead of exact numbers.
@@ -930,7 +952,7 @@
           key: t.plots[slot],
           built: t.built[slot] || null,
           days: t.built[slot] && ctx.day ? dayDiff(t.built[slot], ctx.day) : 0,
-          proposals: b ? Object.entries(b.upgrades).filter(([uk, u]) => !t.upgrades[slot].includes(uk) && needsMet(u.needs, t, ctx, slot)).length : 0,
+          proposals: b ? Object.entries(b.upgrades).filter(([uk, u]) => !t.upgrades[slot].includes(uk) && !t.passed[slot].includes(uk) && needsMet(u.needs, t, ctx, slot)).length : 0,
           building: b ? {
             key: t.plots[slot], name: b.name, tier: b.tier, sign: b.sign, cost: b.cost || BUILD_COST,
             perk: b.card_discount ? `Cards cost ${Math.round(b.card_discount * 100)}% less` : null,
@@ -942,6 +964,7 @@
               return {
                 key: uk, name: u.name, tier: u.tier, cost: u.cost, pitch: u.pitch, objection: u.objection,
                 owned,
+                passed: !owned && t.passed[slot].includes(uk),
                 status: owned ? 'owned' : needsMet(u.needs, t, ctx, slot) ? 'available' : 'locked',
                 needs: needsText(u.needs, t, ctx),
                 unlocked_by: needsMet(u.needs, t, ctx, slot) ? unlockedText(u.needs) : null,
@@ -971,5 +994,5 @@
     };
   }
 
-  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, view, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch, metersHidden, TIMED_FLAGS, CAT_ITEMS, CAT_COATS, catWords, cleanCatName, nameCat, buyCatItem, wearCatItem };
+  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, passUpgrade, view, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch, metersHidden, TIMED_FLAGS, CAT_ITEMS, CAT_COATS, catWords, cleanCatName, nameCat, buyCatItem, wearCatItem };
 }));

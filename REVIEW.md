@@ -1041,6 +1041,34 @@ tapped (on iPhone outside the home screen it points at installing). The
 that charity on a sell, ride or gift count ×1.25 (receipts carry `featured`),
 and Today and Lobbyfest show a banner.
 
+## Ledger, the upgrade shop, quiet-market notice (build 20261030d, API 15)
+
+- **Ledger.** `GET /ledger` and a Ledger screen (menu, and "Ledger ›" on
+  Today) list where the cash came from and went, built on the same money feed
+  as the admin transactions view, filtered to the player.
+- **Upgrade shop.** The Site Office lists every upgrade for a building. Locked
+  ones are blurred with a 🔒 and a plain "Goes on sale once…" line instead of
+  their full details. Each one on the table is a choice between the advisors:
+  the proposer's side buys it; the objector's side passes. Passing is real now
+  (`POST /town/upgrade/pass`, stored in `town.passed`): it clears the "for
+  sale" nag on the to-do list and the plot badge, and the upgrade stays in the
+  shop as passed, buyable later. Passing has no effect on the numbers. The old
+  one-at-a-time proposal screen is gone; it is only a receipt now.
+- **Own-key guard in the town rules.** `build`, `upgrade` and `passUpgrade`
+  check slots and keys with `hasOwnProperty`. Before, a slot of
+  `constructor` crashed the request (500), and an upgrade key of
+  `constructor` could be "bought" and turn the player's own town income into
+  `NaN`. `scripts/test-town.js` checks the odd keys.
+- **Quiet market.** `js/market.js` knows NYSE regular hours (9:30–4 ET,
+  weekdays) and the published holidays and 1pm early closes through 2028.
+  When the stock market is closed, or a 24h hold would see less than half a
+  normal session (Friday afternoon, the eve of a holiday), Today's Buy box says
+  so with when it reopens in the player's time, crypto sorts ahead of stocks
+  in the list and search results, and a picked stock says it won't move until
+  the open. The 40%-closed rule from the request would always be on: the
+  market is open at most 6.5 of any 24 hours. Add 2029 holidays when NYSE
+  publishes them; after 2028 every weekday counts as open.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

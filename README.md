@@ -137,6 +137,8 @@ card's unlock status for the deck grid.
 | POST | `/town/decide` | ✓ | `{ issue_id, side }` — play one of today's cards with Preston's or Dolores's answer; returns the real `fx` and `crowd` (how everyone else answered it today) |
 | POST | `/town/build` | ✓ | `{ slot, key }` — put a building on a plot ($40); replacing one clears its upgrades |
 | POST | `/town/upgrade` | ✓ | `{ slot, key }` — buy an upgrade for the building on a plot |
+| POST | `/town/upgrade/pass` | ✓ | `{ slot, key }` — side with whoever objects to an upgrade that's on the table: nothing is bought, it stops counting in the plot's `proposals`, and it stays for sale with `passed: true` (buying it later clears that; a new building clears all passes). Returns `who` (the objector) |
+| GET | `/ledger` | ✓ | your money, newest first, 60 at a time (`?cursor=` from the last page): buys, sales, collections, gifts, achievements, card plays, buildings, upgrades, cat items, admin adjustments, each with its cash change and, where it applies, a `title` (card), `name` (building/upgrade) or item. Rides, lobbyist moves and admin removals are left out |
 | GET | `/leaderboard` | opt | this quarter's standings + career; best cash-out in the last 24h; `biggest`: the 25 largest open positions by current value (priced from quotes the game already has, no provider calls). `?friends=1` (signed in) scopes all three to your friends and you |
 | POST | `/lobbyists/assign` | yes | `{ allocation?: [{ charity_id, amount }], default_charity_id? }` — move this quarter's lobbyists between charities (the allocation must account for every one) and/or change the default charity new hires go to |
 | GET | `/friends` | ✓ | your friends with quarter/career headcount, streak, rank, town mood; `added_you` = how many players added you |
@@ -249,6 +251,10 @@ freeze at their entry price and can be collected.
 
 - Stocks: [Finnhub](https://finnhub.io) `/quote` — free key, 60 calls/min.
 - Crypto: CoinGecko `simple/price` — no key. Finnhub `BINANCE:XXXUSDT` as a fallback.
+- Stocks move in regular hours only (9:30–4 Eastern on trading days). The front
+  end's `js/market.js` holds NYSE's holidays and early closes (through 2028) and,
+  when stocks are quiet, says so on the Buy box and lists crypto first. Add each
+  new year's dates there when NYSE publishes them.
 - Quotes are cached in memory for `QUOTE_CACHE_MS` (60s), so a player buying and
   selling inside a minute sees the same price. That's intended.
 - With no `FINNHUB_API_KEY`, the server runs with `PRICE_PROVIDER=mock`:
