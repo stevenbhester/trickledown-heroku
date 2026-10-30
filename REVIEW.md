@@ -880,6 +880,36 @@ Lock order matches the sale path (position rows, then the player), so an undo
 racing a sale waits rather than deadlocks; a double undo finds nothing and
 says so.
 
+## Mission & promises, the Lobbyfest split, and Assign lobbyists
+
+**Mission & promises** (☰ menu, `#promises`, readable signed out and linked
+from the landing page, Lobbyfest and the FAQ). The owners' promises, worded
+to keep their exact terms, plus a six-line short version that says it defers
+to the full text. The one place the wording was changed in substance, with
+the owner's say-so: the $100 minimum reads "less than $100" (as first written,
+"larger than $100", it could never apply). Copy elsewhere that disagreed was
+fixed: the FAQ put Lobbyfest "on the last day" (it's midnight Central as the
+quarter begins), the landing page said the money goes "to the charities with
+the most lobbyists" (it's split by share), and the training's fine print now
+says receipts come within 60 days.
+
+**The split, in code** (`game.lobbyfestSplit`, `LOBBYFEST` in `src/game.js`,
+unit-tested): the pot is the ad money (`POOL_USD`) or $100, whichever is more;
+shares are proportional to lobbyists; every charity under $5 in a round is
+left out and the split reruns, until everyone left gets at least $5; cents add
+up to the pot. GET /trickle now returns `payout_usd`, `min_usd`,
+`charity_min_usd` and per-charity `est_usd` / `left_out` from it, and the
+Lobbyfest page shows real dollars ($100, not the play-money "$100K" the old
+formatter would have printed once a pool was set). Not automated: rollover
+(nothing records who was left out at a Lobbyfest; add their lobbyists by hand
+when paying out) and the wealth tax (promised, not built).
+
+**Assign lobbyists** no longer rebuilds the list on every tap (that reset its
+scroll to the top): it's built once and repainted in place. Each charity has a
+number box (decimals, clamped to what's waiting; junk ignored until blur),
+− / + step by a chosen size (0.1, 1, 5, 10), a payroll bar shows the split
+live, and Reset puts it back. The server already accepted fractions.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

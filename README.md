@@ -67,8 +67,13 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
   are still called `donations` / `total_donated` (one lobbyist = $1 of tax);
   the front end never shows them as dollars, because they aren't.
 - `/trickle` reports each charity's share of all lobbyists this quarter.
-  `POOL_USD` is the real ad revenue you've collected; the page shows what each
-  charity's share of it would be by headcount. Update it by hand until ads exist.
+  `POOL_USD` is the real ad revenue you've collected (update it by hand until
+  ads exist). The page shows what each charity would get by the published
+  rules (`game.lobbyfestSplit`): at least $100 goes out (the owners top up),
+  shares are by headcount, and any charity under $5 is left out and the split
+  reruns. The rules are public promises (☰ → Mission & promises): change the
+  page and `LOBBYFEST` in `src/game.js` together. Rollover of left-out
+  charities and the wealth tax are promised but done by hand for now.
 - **Lobbyfest** is the quarter boundary: local midnight in `GAME_TZ` on the
   first day of the next quarter (`quarter_ends_at` on `/me`, `/trickle` and
   `/leaderboard`). Nothing needs to run at that moment: donations are tagged

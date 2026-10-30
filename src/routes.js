@@ -1694,18 +1694,25 @@ router.get('/trickle', wrap(async (req, res) => {
   const { rows: [players] } = await query(
     `SELECT COUNT(*)::int AS donors FROM (SELECT user_id FROM donations WHERE quarter = $1 GROUP BY user_id HAVING SUM(amount) > 0.005) x`, [day.quarter],
   );
+  // What each charity would get if Lobbyfest were now, by the published rules.
+  const split = game.lobbyfestSplit(cfg.poolUsd, rows.map((r) => ({ id: r.id, n: r.quarter_total })));
+  const est = new Map(split.rows.map((r) => [r.id, r]));
   res.json({
     quarter: day.quarter,
     quarter_ends_at: day.quarter_ends_at,
     demo: cfg.demoMode,
     pool_usd: cfg.poolUsd,
+    payout_usd: split.pot,
+    min_usd: game.LOBBYFEST.minimum,
+    charity_min_usd: game.LOBBYFEST.floor,
     quarter_total: quarterTotal,
     all_time: allTime,
     quarter_donors: players.donors,
     charities: rows.map((r) => ({
       ...r,
       share: quarterTotal > 0 ? r.quarter_total / quarterTotal : 0,
-      est_usd: quarterTotal > 0 ? game.round2(cfg.poolUsd * (r.quarter_total / quarterTotal)) : 0,
+      est_usd: est.get(r.id).usd,
+      left_out: est.get(r.id).left_out,
     })),
   });
 }));

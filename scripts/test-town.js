@@ -286,6 +286,39 @@ ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
   ok('cat: day two, adopted either way, named, dressed, one hat at a time, older towns get Comptroller');
 }
 
+// --- Lobbyfest split (the published promises) ------------------------------------
+{
+  const game = require('../src/game');
+  const sum = (r) => Math.round(r.rows.reduce((s, x) => s + x.usd, 0) * 100) / 100;
+  // No ad money yet: the $100 minimum still goes out, by headcount.
+  let r = game.lobbyfestSplit(0, [{ id: 1, n: 30 }, { id: 2, n: 10 }]);
+  assert.strictEqual(r.pot, 100); assert.strictEqual(sum(r), 100);
+  assert.deepStrictEqual(r.rows.map((x) => x.usd), [75, 25]);
+  // More than the minimum: the ad money, all of it.
+  r = game.lobbyfestSplit(250, [{ id: 1, n: 1 }, { id: 2, n: 1 }]);
+  assert.strictEqual(r.pot, 250); assert.deepStrictEqual(r.rows.map((x) => x.usd), [125, 125]);
+  // Under $5 is left out and the rest is rerun without it: $100 over 96/4
+  // lobbyists would give the small one $4, so the big one gets all $100.
+  r = game.lobbyfestSplit(100, [{ id: 1, n: 96 }, { id: 2, n: 4 }]);
+  assert.deepStrictEqual(r.rows.map((x) => [x.usd, x.left_out]), [[100, false], [0, true]]);
+  // Every charity under $5 in a round is left out together, then it reruns.
+  r = game.lobbyfestSplit(100, [{ id: 1, n: 85 }, { id: 2, n: 4.9 }, { id: 3, n: 4.9 }, { id: 4, n: 4.9 }, { id: 5, n: 0.3 }]);
+  assert.deepStrictEqual(r.rows.filter((x) => !x.left_out).map((x) => x.id), [1]);
+  assert.strictEqual(sum(r), 100);
+  // Exactly $5 is enough; cents always add up to the pot.
+  r = game.lobbyfestSplit(100, [{ id: 1, n: 95 }, { id: 2, n: 5 }]);
+  assert.deepStrictEqual(r.rows.map((x) => x.usd), [95, 5]);
+  r = game.lobbyfestSplit(100, [{ id: 1, n: 1 }, { id: 2, n: 1 }, { id: 3, n: 1 }]);
+  assert.strictEqual(sum(r), 100); assert(r.rows.every((x) => x.usd >= 33.33));
+  // No lobbyists anywhere: nobody to pay, nobody left out.
+  r = game.lobbyfestSplit(100, [{ id: 1, n: 0 }]);
+  assert.deepStrictEqual(r.rows, [{ id: 1, usd: 0, left_out: false }]);
+  // More charities than $100 can pay $5 each: the smallest drop one at a time, money still goes out.
+  r = game.lobbyfestSplit(100, Array.from({ length: 25 }, (_, i) => ({ id: i + 1, n: 1 + i / 100 })));
+  assert.strictEqual(sum(r), 100); assert(r.rows.filter((x) => x.usd > 0).every((x) => x.usd >= 5));
+  ok('Lobbyfest split: $100 minimum, proportional, under-$5 left out and rerun, cents add up');
+}
+
 // --- The front end has the same file ------------------------------------------
 const fe = path.join(__dirname, '../../trickledown-stevenhester-com/js/town.js');
 if (fs.existsSync(fe)) {

@@ -130,6 +130,45 @@ function settle({ invested, value, deferred = 0 }, rate = cfg.taxRate) {
   };
 }
 
+// --- Lobbyfest: how the ad money is split ------------------------------------
+// These numbers are public promises (the Mission & promises page): change the
+// page with them, never one without the other.
+//   - At least $100 goes out: if the ads earned less, the owners top it up.
+//   - Each charity's share is proportional to its lobbyists. A charity whose
+//     share would be under $5 gets nothing this time, and the split is rerun
+//     without its lobbyists, until every charity left gets at least $5.
+//     ("If a charity would receive less than $5, it does not receive a
+//     donation": every charity under $5 in a round is left out together.)
+//   - Left-out charities' lobbyists roll over to the next Lobbyfest: pass
+//     them in `n` (this code has no record of past Lobbyfests).
+const LOBBYFEST = { minimum: 100, floor: 5 };
+
+// lobbyists: [{ id, n }]. Returns { pot, rows: [{ id, usd, left_out }] },
+// dollars to the cent (rounding leftovers go to the biggest share).
+function lobbyfestSplit(pool, lobbyists, { minimum = LOBBYFEST.minimum, floor = LOBBYFEST.floor } = {}) {
+  const pot = round2(Math.max(Number(pool) || 0, minimum));
+  let inn = lobbyists.filter((c) => c.n > 0);
+  for (;;) {
+    const total = inn.reduce((s, c) => s + c.n, 0);
+    if (!total) break;
+    const under = inn.filter((c) => (pot * c.n) / total < floor);
+    if (!under.length) break;
+    // If every charity is under $5 (more charities than the pot can pay $5
+    // each), leaving them all out would pay nobody: drop just the smallest.
+    const drop = under.length < inn.length ? new Set(under.map((c) => c.id))
+      : new Set([inn.slice().sort((a, b) => a.n - b.n || a.id - b.id)[0].id]);
+    inn = inn.filter((c) => !drop.has(c.id));
+  }
+  const total = inn.reduce((s, c) => s + c.n, 0);
+  const paid = new Map(inn.map((c) => [c.id, Math.floor(((pot * c.n) / total) * 100) / 100]));
+  if (inn.length) {
+    const rest = round2(pot - [...paid.values()].reduce((s, v) => s + v, 0));
+    const big = inn.slice().sort((a, b) => b.n - a.n || a.id - b.id)[0].id;
+    paid.set(big, round2(paid.get(big) + rest));
+  }
+  return { pot, rows: lobbyists.map((c) => ({ id: c.id, usd: paid.get(c.id) || 0, left_out: c.n > 0 && !paid.has(c.id) })) };
+}
+
 // Ranks for lobbyists hired (one per play-money dollar of tax), computed on
 // the fly from total_donated.
 const BADGES = [
@@ -149,6 +188,6 @@ function badgesFor(totalDonated) {
 }
 
 module.exports = {
-  round2, dayKey, addDays, nextReset, dayNumber, quarterKey, quarterEnd,
+  round2, dayKey, addDays, nextReset, dayNumber, quarterKey, quarterEnd, LOBBYFEST, lobbyfestSplit,
   allowanceFor, effectiveMultiplier, rideMultipliers, valueOf, tierFor, settle, badgesFor, BADGES,
 };
