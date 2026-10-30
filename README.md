@@ -77,9 +77,9 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
   zero on their own, while `total_donated` and the career ranks keep counting.
   What you do at Lobbyfest is read `/trickle` for the closing quarter and send
   the real money.
-- `DEMO_MODE=true` (the default) makes the site say plainly that the charities
-  are fictional and nothing real is moving. The seed list in `src/charities.js`
-  is deliberately made up for that reason.
+- The charities in `src/charities.js` are real (4 stars on Charity Navigator).
+  `DEMO_MODE=true` (off by default) adds notes that the money is pretend, for
+  a test copy.
 
 ## TrickleTown
 
@@ -144,6 +144,10 @@ card's unlock status for the deck grid.
 | POST | `/admin/reset` | admin | `{ username? }` — a brand-new account: no positions, lobbyists, town, friends on their list, streak or device codes; shares unvested; $100 on the next `/me`. Username and sign-ins stay |
 | POST | `/admin/unlock` | admin | `{ issue_id \| issue_ids \| all: true, username? }` — open cards early; they go in the pile for future days |
 | POST | `/admin/deal` | admin | `{ issue_id \| all: true, username? }` — put a card (or every unlocked card) on today's agenda now (town must be open and started today) |
+| POST | `/admin/transactions/undo` | admin | `{ ref, dry_run? }` — delete one feed row and undo it: a position goes with its ride chain (buy refunded, payouts, lobbyists and P&L taken back, a gift re-opened); allowance, cards, building, the cat and grants give their money (and a grant's lobbyists) back. Cash stops at $0. Records an `admin undo` row |
+| GET | `/admin/lobbyists?username=` | admin | a player's lobbyists this quarter, by charity |
+| POST | `/admin/lobbyists/remove` | admin | `{ username, take: [{ charity_id, amount }], dry_run? }` — gone, not moved: off this quarter and the all-time count |
+| POST | `/admin/users/remove` | admin | `{ usernames: [...], confirm, dry_run? }` — delete accounts and everything of theirs; `confirm` is the username (one) or the count (several). Never admins |
 | GET | `/auth/options` | | whether Google sign-in is on, and the client id |
 
 Auth is a Bearer JWT (HS256) in the `Authorization` header. Tokens last 180
@@ -165,7 +169,9 @@ days and carry the account's `token_version`; a password change or
   hashed at rest, single-use, 15 minutes, one live code per account, and
   redeeming shares the login rate limit (20 / 15 min per IP).
 - Admin is a username allow-list (`ADMIN_USERNAMES`), checked on the
-  signed-in account; the endpoints log who granted what to whom.
+  signed-in account; the endpoints log who granted what to whom. Admin names
+  are reserved (no sign-up, claim or rename into one; admins can't rename
+  away), so the allow-list can't be joined by grabbing a name.
 - Tokens slide: `/me` returns a fresh `token` once the current one is past
   half its 180 days, so a guest who keeps playing is never signed out of an
   account they can't sign back into. `token_version` still revokes.
@@ -303,11 +309,9 @@ DEPLOY.md         step-by-step go-live
 
 Things the demo deliberately leaves out:
 
-- **Charity list.** The seed list is fictional. Replace it with real
-  organizations you've vetted (Charity Navigator or your grader of choice, with
-  a minimum grade), then set `DEMO_MODE=false`. Rows are upserted by slug on
-  boot and anything you remove from the file is retired, so editing
-  `src/charities.js` is enough.
+- **Charity list.** Done: 18 real charities, each 4 of 4 stars on Charity
+  Navigator as of Oct 29, 2026. Re-check before each payout; edit
+  `src/charities.js` (upserted by slug on boot, removals retired).
 - **Disbursement.** Something like Every.org can pay many charities from one
   pot with receipts. Post those receipts on the Trickle page.
 - **Legal.** Several US states regulate "commercial co-ventures" (businesses

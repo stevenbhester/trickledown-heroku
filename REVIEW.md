@@ -760,6 +760,126 @@ last waved the notice off (`users.followers_seen_at`). The page shows:
 
 Removing a friend is still silent.
 
+## Real charities, requests, bug reports, the admin page
+
+**Charities.** `src/charities.js` is now 18 real organizations, each 4 of 4
+stars on Charity Navigator (checked on each profile, Oct 29, 2026), with EIN,
+site, cause and a one-line description. Scores (%) aren't shown: most aren't
+readable without a browser, and Charity Navigator changed its scoring in spring
+2026, so older "100" claims may not hold. The fictional ones are retired
+(history kept). `DEMO_MODE` is now off unless set to `true`.
+
+**Choosing.** A default charity is set only by an explicit choice now
+(`explicitPick`). Until then, a cash-out parks lobbyists on a provisional
+charity, spread across the list per player (`md5(slug || user id)`), so list
+order doesn't decide where unchosen lobbyists sit. `/me` says
+`needs_charity` when there are lobbyists and no real default (none, or one that
+was retired). A retired default stays on record; new hires skip it.
+POST /charity/choose sets the default and moves this quarter's lobbyists:
+all of them if there was no default (they were provisional), otherwise only the
+ones on retired charities (ones the player put on a real charity stay put). Moves are paired donation rows (−n, +n), so nothing
+is created or lost.
+
+On the page, the gift and sale receipts no longer ask; the first-hire moment
+does: "Who do they lobby for?", the 18 charities as cards (cause, one line,
+stars, site), the re-explanation (default; the more lobbyists, the bigger the
+share of ad revenue; change it anytime in Assign), and the button that
+continues into TrickleTown waits for a pick. Skipped, it comes back: a to-do
+line, and the chooser opens by itself once a session.
+
+**Requests and bug reports.** POST /charity-requests (name, website, reason)
+and POST /bugs (description, the page's URL unless unticked, and a client line:
+build, screen size, theme, user agent). Text goes through the wall cleaner;
+URLs must be http(s), no credentials, a real host ("example.org" becomes
+"https://example.org/"). Per-account limits: 10 requests a day, 10 bug reports
+an hour. Stored as plain text, rendered with esc().
+
+**Admin page** (☰ → Admin, `#admin`, ADMIN_USERNAMES only, checked by the
+server on every call): overview numbers, then four tabs.
+- Transactions: every one, newest first, with who: buys, rides, sales,
+  collections, busts, gifts (from positions) plus a new `ledger` table for
+  money that moves outside a position (allowance, card choices, buildings,
+  upgrades, the cat's wardrobe, admin grants, lobbyist moves). Filter by player;
+  "Load older" pages by an exact cursor (time to the microsecond plus row ref). The ledger starts now; earlier town spending
+  wasn't recorded anywhere.
+- Positions: every open one, worth at the last price the server saw (no fresh
+  lookups, so the admin page can't spend the price budget).
+- Players: everyone with cash, lobbyists (all-time and this quarter), open and
+  total positions, cards played, buildings, trophies, friends, streak, P&L,
+  charity, cat, joined, last seen. Sortable.
+- Requests: charity requests and bug reports, new first; Done, Dismiss, Reopen.
+Admin JSON carries usernames and game numbers only: no password hashes,
+Google ids, tokens or emails.
+
+**Independent security review** of the above, and what changed:
+- Admin was a username allow-list, and usernames can be registered, claimed
+  and changed: an admin name with no account yet (or one an admin renamed
+  away from) could be taken by anyone. Admin names are now reserved: register,
+  claim and rename into one are refused ("taken"), and an admin account can't
+  rename away. To add an admin, create the account first, then add the name.
+- Spam: per-IP limits on top of the per-account ones (30 requests a day, 30 bug
+  reports an hour, counted before sign-in), and past 2,000 unread of either,
+  new ones are refused until the pile is read.
+- A bug report's "Page" is whatever the reporter sent: on the admin page it's a
+  link only when it points at the game itself, plain text otherwise.
+- The charity choice under the player's row lock: sell, ride, gift claim and
+  grant pick the charity inside the transaction, after locking the player, so a
+  choice made at the same moment can't leave lobbyists on the old pick.
+- Choosing the same charity again doesn't add ledger rows.
+- Ids from requests are clamped to the int4 range (a huge id was a database
+  error, now a 400); the request-kind lookup uses own keys only.
+- Older admin tools (grant, unlock, switches, deal) returned the target
+  player's email; they don't any more.
+- Indexes for the feed: positions(opened_at), donations(position_id).
+- Front end: a Content-Security-Policy (meta tag): only the site's own scripts
+  and Google's sign-in script run, and the page talks only to itself, the API
+  and Google sign-in. Not a substitute for escaping (everything shown is still
+  esc()'d), a backstop if something slips. Changing the API URL or adding an
+  ad network means updating it (comment in index.html).
+Checked: no SQL built from input (the one table name comes from a fixed map),
+every admin route behind requireAdmin on the server, no non-admin path to
+admin data.
+
+## Admin clean-up: delete transactions, remove lobbyists, remove accounts
+
+For clearing out test accounts and test activity. All three are admin-only,
+checked on the server, rate-limited with the other admin tools, and each takes
+`dry_run: true` first: the server does the whole thing inside a transaction
+and rolls it back, so the confirmation sheet shows exactly what will change.
+
+**Delete a transaction** (Transactions tab, Delete on the row). It's an undo,
+not just hiding a line:
+- A position goes with its whole ride chain (a ride only exists on top of the
+  one before). The buy is refunded, whatever it paid out is taken back, its
+  lobbyists and P&L come off, and a gift goes back to unclaimed (claimable
+  again, same amount).
+- Lobbyists come off with matching negative rows, starting with the charity
+  they were hired for, then wherever they've since been moved; no charity goes
+  below zero and every total stays a SUM. Hire rows stay, unlinked from the
+  deleted position.
+- Ledger rows: allowance, cards, building, upgrades and the cat give the money
+  back (the building, outfit or card result stays, and the sheet says so); an
+  admin grant comes back off, lobbyists included (ledger rows now remember the
+  grant's charity). Moves between charities and admin records can't be undone.
+- Cash never goes below $0; the sheet says when it stops short.
+- An `admin undo` row records what changed and who did it.
+Two taps: Delete and undo, then Yes.
+
+**Remove lobbyists** (Players tab → Lobbyists): how many to take from each
+charity this quarter; gone, not moved (off the payroll and the all-time
+count). An `admin remove` row records it. Two taps.
+
+**Remove accounts** (Players tab → Remove, or tick several → Remove…).
+Everything goes through the foreign keys' cascades: positions, lobbyists,
+achievements, town, friends both ways, wall posts, link codes, ledger. Charity
+requests and bug reports stay, unsigned. Never admin accounts. Confirmed by
+typing the username, or the count for several, and the server checks the same
+word. Their sign-ins stop working at once (the user row is gone).
+
+Lock order matches the sale path (position rows, then the player), so an undo
+racing a sale waits rather than deadlocks; a double undo finds nothing and
+says so.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

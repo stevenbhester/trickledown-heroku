@@ -64,7 +64,8 @@ module.exports = {
 
   poolUsd: num(process.env.POOL_USD, 0),
 
-  // While true, the site says plainly that the charities are fictional and no
-  // real money moves. Set DEMO_MODE=false once the charity list is real.
-  demoMode: (process.env.DEMO_MODE || 'true').toLowerCase() !== 'false',
+  // The charity list (src/charities.js) is real now, so the site no longer
+  // says the charities are made up. DEMO_MODE=true brings that warning back,
+  // for a test copy running with pretend charities.
+  demoMode: (process.env.DEMO_MODE || 'false').toLowerCase() === 'true',
 };

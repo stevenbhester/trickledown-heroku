@@ -14,7 +14,10 @@ shows a "not connected yet" notice instead of quietly playing the fake game.
 
 For testing, put your username(s) in `ADMIN_USERNAMES`: the Account sheet
 grows an Admin section that grants cash and lobbyists (real rows, so the
-boards and the town see them) and resets the account to day one.
+boards and the town see them) and resets the account to day one, and ☰ → Admin
+opens the admin page. Admin names are reserved: nobody can sign up as, claim or
+rename into one, and an admin account can't change its username. So to add an
+admin, create that account first, then add its name here.
 
 ## 1. Backend on Heroku
 
@@ -26,7 +29,7 @@ heroku addons:create heroku-postgresql:essential-0
 heroku config:set JWT_SECRET="$(openssl rand -hex 32)"
 heroku config:set CORS_ORIGIN="https://stevenbhester.github.io,https://trickledown.stevenhester.com"
 heroku config:set FINNHUB_API_KEY="your_finnhub_key"
-heroku config:set GAME_TZ=America/Chicago LAUNCH_DATE=$(date +%F) DEMO_MODE=true
+heroku config:set GAME_TZ=America/Chicago LAUNCH_DATE=$(date +%F)
 heroku config:set ADMIN_USERNAMES=steven          # your username(s), comma-separated; grant, cards and reset from Account
 git push heroku main
 heroku logs --tail                        # should say: Trickle Down API on :PORT (prices: live, …)
@@ -97,17 +100,27 @@ stable Google `sub`, never on the email address. Linking Google to an existing
 account only happens while signed in to that account; nothing is ever matched
 up by email.
 
-## 4. When the charities are real
+## 4. The charities
 
-Replace `src/charities.js` with vetted organizations, redeploy, and set
-`DEMO_MODE=false`. Rows are upserted by slug and anything removed is retired,
-so history is kept. See the README's "Before real money moves" list first.
+They're real: 18 organizations in `src/charities.js`, each rated 4 of 4 stars
+by Charity Navigator when the list was made. Rows are upserted by slug on every
+boot; anything removed from the file is retired (history kept), and players
+whose default was retired are asked to choose again, with their lobbyists
+following their pick. Re-check the ratings before each quarter's payout.
+
+Players ask for others from the game (Request a charity); the requests land on
+the admin page (☰ → Admin → Requests). Adding one is a line in
+`src/charities.js` and a redeploy.
+
+If you set `DEMO_MODE=true` earlier (the old instructions said to), unset it
+now: `heroku config:unset DEMO_MODE`. With it on, the site adds "demo, the
+money is pretend" notes. See the README's "Before real money moves" list.
 
 ## Did the deploy take?
 
 The page and the server ship separately, so it's easy to update one and not
 the other. Open `https://<your-app>.herokuapp.com/health` in a browser. It
-should say `"api":9` (the number in `API_VERSION` in `src/routes.js`). No
+should say `"api":11` (the number in `API_VERSION` in `src/routes.js`). No
 `api`, or a lower number, means the server is older than the page: upload
 the whole backend again (every file in `src/`, including any new ones) and let
 Heroku redeploy. Signed in as an admin, the page also says so in a yellow bar

@@ -189,6 +189,57 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS wall_seen_at TIMESTAMPTZ;
 -- When the player last dismissed "so-and-so added you" (adding back also clears one).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS followers_seen_at TIMESTAMPTZ;
 
+-- Real charities carry their EIN and the rating we checked them against.
+ALTER TABLE charities ADD COLUMN IF NOT EXISTS ein TEXT NOT NULL DEFAULT '';
+ALTER TABLE charities ADD COLUMN IF NOT EXISTS rating TEXT NOT NULL DEFAULT '';
+
+-- Players asking for a charity that isn't on the list. Plain text, never HTML.
+CREATE TABLE IF NOT EXISTS charity_requests (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 100),
+  url TEXT NOT NULL CHECK (char_length(url) <= 300),
+  reason TEXT NOT NULL DEFAULT '' CHECK (char_length(reason) <= 600),
+  status TEXT NOT NULL DEFAULT 'new',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  handled_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS charity_requests_created ON charity_requests (created_at DESC);
+
+-- Bug reports from ☰ → Report a bug, with the page they were on.
+CREATE TABLE IF NOT EXISTS bug_reports (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  description TEXT NOT NULL CHECK (char_length(description) BETWEEN 1 AND 2000),
+  url TEXT NOT NULL DEFAULT '' CHECK (char_length(url) <= 500),
+  client TEXT NOT NULL DEFAULT '' CHECK (char_length(client) <= 300),
+  status TEXT NOT NULL DEFAULT 'new',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  handled_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS bug_reports_created ON bug_reports (created_at DESC);
+
+-- Money that moves outside a position (the daily allowance, town spending,
+-- the cat's wardrobe, admin grants, lobbyists moved between charities), so
+-- the admin page can show every transaction in order. Positions already
+-- record buys, sales, rides and gifts.
+CREATE TABLE IF NOT EXISTS ledger (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+  lobbyists NUMERIC(14,2) NOT NULL DEFAULT 0,
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ledger_created ON ledger (created_at DESC);
+CREATE INDEX IF NOT EXISTS ledger_user ON ledger (user_id);
+-- Where an admin grant's lobbyists went, so undoing it takes them from there.
+ALTER TABLE ledger ADD COLUMN IF NOT EXISTS charity_id INTEGER REFERENCES charities(id);
+-- The admin transaction feed reads positions by open time and lobbyists by position.
+CREATE INDEX IF NOT EXISTS positions_opened_at ON positions (opened_at DESC);
+CREATE INDEX IF NOT EXISTS donations_position ON donations (position_id) WHERE position_id IS NOT NULL;
+
 `;
 
 async function migrate() {
@@ -205,12 +256,12 @@ async function migrate() {
   for (let i = 0; i < charities.length; i++) {
     const c = charities[i];
     await pool.query(
-      `INSERT INTO charities (slug, name, blurb, url, category, sort, active)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
+      `INSERT INTO charities (slug, name, blurb, url, category, sort, active, ein, rating)
+       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)
        ON CONFLICT (slug) DO UPDATE SET
          name = EXCLUDED.name, blurb = EXCLUDED.blurb, url = EXCLUDED.url,
-         category = EXCLUDED.category, sort = EXCLUDED.sort, active = true`,
-      [c.slug, c.name, c.blurb, c.url, c.category, i],
+         category = EXCLUDED.category, sort = EXCLUDED.sort, active = true, ein = EXCLUDED.ein, rating = EXCLUDED.rating`,
+      [c.slug, c.name, c.blurb, c.url, c.category, i, c.ein || '', c.rating || ''],
     );
   }
   // Anything no longer in the list is retired, not deleted: its donation
@@ -218,6 +269,10 @@ async function migrate() {
   if (charities.length) {
     const slots = charities.map((_, i) => `$${i + 1}`).join(', ');
     await pool.query(`UPDATE charities SET active = false WHERE slug NOT IN (${slots})`, charities.map((c) => c.slug));
+    // Players whose default was retired keep it on record (so choosing again
+    // moves only the lobbyists on retired charities). /me flags them with
+    // needs_charity, new hires skip the retired one, and POST /charity/choose
+    // sets a real default.
   }
 }
 
