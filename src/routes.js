@@ -468,7 +468,7 @@ router.post('/admin/reset', auth.requireUser, requireAdmin, RL.admin, wrap(async
     await tx.query('DELETE FROM wall_posts WHERE owner_id = $1 OR author_id = $1', [target.id]);
     await tx.query(
       `UPDATE users SET cash = 0, total_donated = 0, realized_pnl = 0, streak = 0, last_allowance_day = NULL,
-              town = NULL, charity_id = NULL, vested_at = NULL, wall_seen_at = NULL, created_at = now() WHERE id = $1`,
+              town = NULL, charity_id = NULL, vested_at = NULL, wall_seen_at = NULL, followers_seen_at = NULL, created_at = now() WHERE id = $1`,
       [target.id],
     );
   });
@@ -694,6 +694,8 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     achievements: ach,
     fresh_cards: freshCards.map((id) => (Town.ISSUES.find((i) => i.id === id) || {}).title).filter(Boolean),
     ...(await wallUnread(user).then((w) => ({ wall_unread: w.n, wall_unread_from: w.from, wall_latest: w.latest }))),
+    // "erin added you": new since you last waved it off, not yet added back.
+    new_followers: await addedYou(user.id, user.followers_seen_at || null),
     token: renewedToken,
   });
 }));
@@ -1083,6 +1085,37 @@ router.post('/town/upgrade', auth.requireUser, wrap(async (req, res) => {
 // moved, not created or destroyed). The move is recorded as +/- donation rows
 // with no position, so every total stays a SUM.
 // Past quarters already marched; only the current one can be rearranged.
+// --- The cat ---------------------------------------------------------------
+// Name her (or him), and dress her. Outfits are pure vanity, priced to match.
+async function catAction(req, res, act) {
+  const result = await withTx(async (tx) => {
+    const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    if (!u.town) return { error: 'There is no cat yet.' };
+    const town = u.town;
+    const r = act(town, u);
+    if (r.error) return r;
+    const { rows: [u2] } = await tx.query(
+      'UPDATE users SET cash = cash + $1, town = $2 WHERE id = $3 RETURNING *', [r.cash || 0, town, u.id],
+    );
+    return { user: u2 };
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  result.user.friend_count = await friendCount(result.user.id);
+  res.json({ ok: true, user: publicUser(result.user), town: townView(result.user) });
+}
+router.post('/town/cat/name', auth.requireUser, RL.trade, wrap(async (req, res) => {
+  const b = req.body || {};
+  return catAction(req, res, (town) => Town.nameCat(town, { name: b.name, pronoun: b.pronoun, coat: b.coat }));
+}));
+router.post('/town/cat/buy', auth.requireUser, RL.trade, wrap(async (req, res) => {
+  const item = String((req.body || {}).item || '');
+  return catAction(req, res, (town, u) => Town.buyCatItem(town, item, u.cash));
+}));
+router.post('/town/cat/wear', auth.requireUser, RL.trade, wrap(async (req, res) => {
+  const b = req.body || {};
+  return catAction(req, res, (town) => Town.wearCatItem(town, String(b.item || ''), b.on !== false));
+}));
+
 router.post('/lobbyists/assign', auth.requireUser, RL.trade, wrap(async (req, res) => {
   const body = req.body || {};
   const day = dayInfo();
@@ -1240,10 +1273,12 @@ router.get('/leaderboard', optionalUser, wrap(async (req, res) => {
 
 // --- Friends --------------------------------------------------------------------
 //
-// One-directional: adding someone lets you see their coin and town and puts
-// them on your friends board. They aren't told, and they don't see you unless
-// they add you back. Everything shown is already public on the leaderboards or
-// is play-money game state; never email, never anything from Account.
+// One-directional: adding someone puts them on your friends board and lets
+// them write on your wall. They're told ("erin added you", with an Add back
+// button) until they add you back or wave it off; they don't see you on their
+// board unless they add you back. Everything shown is already public on the
+// leaderboards or is play-money game state; never email, never anything from
+// Account. Removing someone is silent.
 
 const MAX_FRIENDS = 50;
 
@@ -1335,6 +1370,20 @@ async function wallPosts(owner, viewer) {
 // New posts by other people since you last opened your profile: how many,
 // who (latest first, up to three names) and the newest post's id, so the
 // page can tell "something new" from "the same thing again".
+// People who added you and you haven't added back. `since`: only those who
+// did it after you last dismissed the notice (null = all of them).
+async function addedYou(userId, since = null, limit = 6) {
+  const { rows } = await query(
+    `SELECT u.username, f.created_at AS at FROM friends f JOIN users u ON u.id = f.user_id
+      WHERE f.friend_id = $1
+        AND NOT EXISTS (SELECT 1 FROM friends b WHERE b.user_id = $1 AND b.friend_id = f.user_id)
+        AND f.created_at > COALESCE($2, '-infinity'::timestamptz)
+      ORDER BY f.created_at DESC LIMIT $3`,
+    [userId, since, limit],
+  );
+  return rows.map((r) => ({ username: r.username, at: r.at }));
+}
+
 async function wallUnread(user) {
   const { rows } = await query(
     `SELECT w.id, a.username FROM wall_posts w JOIN users a ON a.id = w.author_id
@@ -1412,6 +1461,7 @@ async function playerProfile(viewer, u, day) {
     town: town ? {
       happiness: town.happiness, income: town.income, hire_cost: town.hire_cost, motto: town.motto,
       sides: { preston: u.town.sides.preston || 0, dolores: u.town.sides.dolores || 0 },
+      pet: town.cat && town.cat.name ? { name: town.cat.name, pronoun: town.cat.pronoun, coat: town.cat.coat, wearing: town.cat.wearing, owned: town.cat.owned.length, spent: town.cat.spent } : null,
       buildings: town.plots.map((p) => (p.building
         ? { slot: p.slot, label: p.label, key: p.key, name: p.building.name, tier: p.building.tier, days: p.days, upgrades: p.building.upgrades.filter((x) => x.owned).map((x) => ({ name: x.name, tier: x.tier })) }
         : { slot: p.slot, label: p.label, key: null })),
@@ -1450,7 +1500,7 @@ router.get('/friends', auth.requireUser, wrap(async (req, res) => {
     badges: game.badgesFor(u.total_donated), cash: u.cash, last_seen: lastSeen(u.last_seen_at),
     town: u.town && Town.isUnlocked(u.total_donated) ? { happiness: u.town.happiness, motto: Town.view(u.town, townCtx(u, { day: day.key })).motto } : null,
   }));
-  res.json({ friends, added_you: followers.n, max: MAX_FRIENDS, your_username: req.user.username, is_guest: req.user.is_guest });
+  res.json({ friends, added_you: followers.n, waiting: await addedYou(req.user.id, null, 50), max: MAX_FRIENDS, your_username: req.user.username, is_guest: req.user.is_guest });
 }));
 
 router.post('/friends/add', auth.requireUser, RL.social, wrap(async (req, res) => {
@@ -1461,6 +1511,12 @@ router.post('/friends/add', auth.requireUser, RL.social, wrap(async (req, res) =
   if (n >= MAX_FRIENDS) return res.status(400).json({ error: `That's ${MAX_FRIENDS} friends. Preston says that's plenty.` });
   await query('INSERT INTO friends (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.user.id, target.id]);
   res.json({ ok: true, username: target.username, friend_count: await friendCount(req.user.id) });
+}));
+
+// "Not now" on the added-you notice: stop showing the ones there are now.
+router.post('/friends/seen', auth.requireUser, wrap(async (req, res) => {
+  await query('UPDATE users SET followers_seen_at = now() WHERE id = $1', [req.user.id]);
+  res.json({ ok: true });
 }));
 
 router.post('/friends/remove', auth.requireUser, wrap(async (req, res) => {

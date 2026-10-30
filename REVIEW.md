@@ -716,6 +716,50 @@ A town that used the old one-way "unlock everything" reads as the switch
 being on. Also fixed: the admin card routes kept running after an error
 reply (a "No player by that name" would throw on the way out).
 
+## The cat
+
+The cat card now comes on day two, every time (`pin` puts an unlocked,
+unplayed card first in the day's hand), and either answer keeps the cat.
+Then you name it (letters, numbers, spaces, . ' - ; 20 at most), pick she or
+he and one of five coats. `town.cat` holds the name, pronoun, coat, what's
+owned, what's worn (one per slot: head, eyes, neck, body) and the total spent.
+
+- **In TrickleTown**: drawn in the village between the lots, in whatever
+  it's wearing (with a "?" until it has a name), and a row on the town panel.
+  Tapping either opens the cat sheet.
+- **The cat sheet**: portrait, coat, pronoun, how long you've had it,
+  wardrobe worth, rename, and the shop.
+- **The wardrobe**: eleven items from a $15K silk bow tie to a $1M solid gold
+  crown, about $3.1M for the lot. Buying wears it. They do nothing, which the
+  sheet says. It's the first thing in the game for a rich player to spend
+  money on, which the late game needed.
+- **Profiles**: 🐈 and the name in the header, and a portrait with what it's
+  wearing and the wardrobe's worth under TrickleTown.
+- **The cards** that mention the cat use its name and pronoun (`{Cat}`,
+  `{he}`, `{him}`, `{his}` in the text, filled in by `catWords`). Towns that
+  met the cat before this get Comptroller, the name the cards always used.
+  "Replace the cat" on the strike card is now "Dock his/her treats": nobody
+  loses a cat they've dressed.
+
+Routes: POST /town/cat/name, /town/cat/buy, /town/cat/wear. Checked in
+`scripts/test-town.js`.
+
+## "So-and-so added you"
+
+Adding someone used to be silent. Now they're told. /me carries
+`new_followers`: people who added you, whom you haven't added back, since you
+last waved the notice off (`users.followers_seen_at`). The page shows:
+
+- a small card at the bottom, the same shape as an achievement's, saying
+  "erin added you as a friend", with **Add back** on it. Adding back moves to
+  the next person; × (POST /friends/seen) waves off everyone waiting. Shown
+  once per new follower per browser, so reloads don't repeat it.
+- a to-do line ("erin and 1 other added you. Add back?") that opens Friends.
+- an "Added you" list at the top of Friends (`waiting` on GET /friends) with
+  an Add back button for each, until you do.
+
+Removing a friend is still silent.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

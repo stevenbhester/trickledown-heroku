@@ -257,6 +257,35 @@ ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
   ok('loss tiers: Paper cut, Flesh wound, Taking on water, Comically disastrous, Rest in peace');
 }
 
+// --- The cat: day two, named by you, dressed at great expense -------------------
+{
+  const t = Town.fresh();
+  const ctx = (day) => ({ day, unlocked: true, lobbyists: 12, cash: 100, friends: 0, streak: 2, uid: 7 });
+  Town.tick(t, ctx('2026-11-01')); Town.ensureIssues(t, ctx('2026-11-01'));
+  assert.ok(!t.issues.some((i) => i.id === 'cat'), 'no cat on day one');
+  Town.tick(t, ctx('2026-11-02')); Town.ensureIssues(t, ctx('2026-11-02'));
+  assert.ok(t.issues.some((i) => i.id === 'cat'), 'the cat is in the hand on day two');
+  assert.strictEqual(Town.decide(t, 'cat', 'preston', 100).error, undefined);
+  assert.ok(t.cat && t.cat.name === null, 'either side adopts her, unnamed');
+  assert.ok(Town.nameCat(t, { name: '<b>', pronoun: 'he' }).error, 'names are letters and numbers');
+  assert.strictEqual(Town.nameCat(t, { name: '  Mr.  Biscuits ', pronoun: 'he', coat: 'black' }).cat.name, 'Mr. Biscuits');
+  const v = Town.view(t, ctx('2026-11-02'));
+  assert.strictEqual(v.cat.coat, 'black');
+  const strike = Town.ISSUES.find((i) => i.id === 'cat_strike');
+  assert.strictEqual(Town.catWords(v.cat, strike.setup), 'Mr. Biscuits has stopped accepting pets, paid or otherwise. He sits on the register. He stares.');
+  assert.ok(Town.buyCatItem(t, 'crown', 500).error, 'the crown costs $1M');
+  const r = Town.buyCatItem(t, 'top_hat', 250);
+  assert.strictEqual(r.cash, -200); assert.strictEqual(t.cat.wearing.head, 'top_hat');
+  Town.buyCatItem(t, 'beret', 100); assert.strictEqual(t.cat.wearing.head, 'beret', 'one hat at a time');
+  Town.wearCatItem(t, 'top_hat', true); assert.strictEqual(t.cat.wearing.head, 'top_hat');
+  Town.wearCatItem(t, 'top_hat', false); assert.ok(!t.cat.wearing.head);
+  assert.strictEqual(t.cat.spent, 240);
+  // A town that met the cat before names existed gets Comptroller.
+  const old = Town.fresh(); old.played = ['cat']; old.flags = ['cat_mascot']; delete old.cat; Town.migrate(old);
+  assert.strictEqual(old.cat.name, 'Comptroller');
+  ok('cat: day two, adopted either way, named, dressed, one hat at a time, older towns get Comptroller');
+}
+
 // --- The front end has the same file ------------------------------------------
 const fe = path.join(__dirname, '../../trickledown-stevenhester-com/js/town.js');
 if (fs.existsSync(fe)) {

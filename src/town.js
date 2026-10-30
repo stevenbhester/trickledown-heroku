@@ -225,18 +225,19 @@
     { id: 'dress_code', needs: { days_played: 7 }, title: 'A dress code', setup: 'HR would like a dress code. HR has drawn a diagram. The diagram has a lot of arrows.', ask: 'Is there a dress code?',
       preston: { label: 'Mandatory blazers, deducted from pay', line: 'Navy. Company crest. Deducted from pay, so technically they own them.', fx: { income: 3, happy: -4 }, sets: 'blazers' },
       dolores: { label: 'Casual Fridays', line: 'Casual Fridays. Then casual Thursdays. I have a roadmap.', fx: { happy: 3 }, sets: 'casual' } },
-    { id: 'cat', needs: { days_played: 4 }, title: 'A cat', setup: 'A cat has moved into the lobby. She has chosen the good chair. Nobody has objected.', ask: 'What\'s the cat\'s job?',
-      preston: { label: 'Charge for petting', line: 'A dollar a pet. She is a revenue stream with whiskers.', fx: { income: 1, happy: -1 }, sets: 'cat_fee' },
-      dolores: { label: "She's the mascot now", line: 'Her name is Comptroller. She has a badge. It says "Comptroller."', fx: { cash: -4, happy: 4 }, sets: 'cat_mascot' } },
+    // Day two, every time (pin): the cat. Either way she stays, and you name her.
+    { id: 'cat', pin: true, needs: { days_played: 2 }, title: 'A cat', setup: 'A cat has moved into the lobby and taken the good chair. Nobody has objected. Nobody would dare.', ask: 'What\'s the cat\'s job?',
+      preston: { label: 'Charge for petting', line: 'A dollar a pet. A revenue stream with whiskers. You name it; I invoice it.', fx: { income: 1, happy: -1 }, sets: 'cat_fee' },
+      dolores: { label: 'Make the cat the mascot', line: 'A name, a badge and the good chair, permanently. You pick the name.', fx: { cash: -4, happy: 4 }, sets: 'cat_mascot' } },
     { id: 'wifi_leak', needs: { flag: 'wifi_paid' }, title: 'Someone shared the password', setup: "It's on a lamppost. It's on the lampposts in the next town. It's on a billboard, and the billboard was not cheap.", ask: 'What do you do now that everyone has it?',
       preston: { label: 'Cut the wifi', line: 'No wifi, no problem, no bill. They can lobby by mail.', fx: { income: 2, happy: -6 } },
       dolores: { label: 'Make it free, say sorry', line: 'Free wifi and an apology. The apology is the expensive part.', fx: { income: -1, happy: 5 } } },
     { id: 'blazer_revolt', needs: { flag: 'blazers' }, title: 'The blazers are in the dumpster', setup: 'All of them. Folded. There is a note. The note is polite, which is somehow worse.', ask: 'What do you do about the blazers?',
       preston: { label: 'Bill them for the blazers', line: 'Forty dollars a blazer, payable in installments, with interest.', fx: { cash: 10, happy: -6 } },
       dolores: { label: 'Casual, forever', line: 'The dumpster has spoken. It usually does, eventually.', fx: { happy: 6 } } },
-    { id: 'cat_agent', needs: { flag: 'cat_mascot' }, title: 'Comptroller has an agent', setup: 'The cat has been offered a commercial. The agent is a lobbyist. Of course he is.', ask: 'Does the cat take the deal?',
-      preston: { label: 'Sell Comptroller merch', line: 'Comptroller mugs. Comptroller blazers. Comptroller, the fragrance.', fx: { cash: 15, happy: -2 } },
-      dolores: { label: 'Give her the window seat', line: 'She gets the window. The sunny one. That is the whole negotiation.', fx: { happy: 6 } } },
+    { id: 'cat_agent', needs: { flag: 'cat_mascot' }, title: '{Cat} has an agent', setup: '{Cat} has been offered a commercial. The agent is a lobbyist. Of course he is.', ask: 'Does {cat} take the deal?',
+      preston: { label: 'Sell {Cat} merch', line: '{Cat} mugs. {Cat} blazers. {Cat}, the fragrance.', fx: { cash: 15, happy: -2 } },
+      dolores: { label: 'Give {him} the window seat', line: '{He} gets the window. The sunny one. That is the whole negotiation.', fx: { happy: 6 } } },
     { id: 'visitor', needs: { friends: 1 }, title: 'A friend stopped by', setup: 'One of your friends came to see the village. They are standing in the lobby, taking notes. Or pictures. Notes and pictures.', ask: 'How do you host them?',
       preston: { label: 'The tour, then the upsell', line: 'Free tour. Gift shop at the end. The gift shop is the tour.', fx: { cash: 5, happy: -1 } },
       dolores: { label: 'Lunch at the Company Store', line: 'Buy them lunch. Let them meet the lobbyists. Let the lobbyists complain. It is good for everyone.', fx: { cash: -6, happy: 4 } } },
@@ -276,11 +277,11 @@
       dolores: { label: 'Let them write it', line: 'Their newsletter. Their words. You will not enjoy every issue, which is how you know it is working.', fx: { happy: 3 }, sets: 'newsletter_free' } },
     { id: 'fire_drill', needs: { days_played: 10 }, title: 'Fire drill', setup: 'The annual fire drill is due. The fire marshal has left three voicemails. The third was just sighing.', ask: 'Does the drill happen?',
       preston: { label: 'Sign the form, skip the drill', line: 'Everyone knows where the door is. It is the big one that says "door."', fx: { cash: 4, happy: -1 }, sets: 'no_drill' },
-      dolores: { label: 'Run the drill', line: 'Twenty minutes. Everybody outside. The cat goes first; she has made that clear.', fx: { cash: -3, happy: 2 } } },
+      dolores: { label: 'Run the drill', line: 'Twenty minutes. Everybody outside. {Cat} goes first; {he} has made that clear.', fx: { cash: -3, happy: 2 } } },
     { id: 'holiday_party', needs: { days_played: 12 }, title: 'The holiday party', setup: 'There is a budget line for a party. It is a small line. It has a question mark next to it.', ask: 'What kind of party is it?',
       preston: { label: 'Cash bar, mandatory', line: 'Attendance is required. Drinks are not. That is where the margin lives.', fx: { cash: 8, happy: -4 } },
       dolores: { label: 'Open bar, optional', line: 'Nobody has to come. Everybody will. Budget for that.', fx: { cash: -25, happy: 8 } } },
-    { id: 'newsletter_expose', needs: { flag: 'newsletter_free' }, title: 'The newsletter ran an exposé', setup: 'Issue four is about you. It is well sourced. One of the sources is the cat.', ask: 'How do you answer the exposé?',
+    { id: 'newsletter_expose', needs: { flag: 'newsletter_free' }, title: 'The newsletter ran an exposé', setup: 'Issue four is about you. It is well sourced. One of the sources is {cat}.', ask: 'How do you answer the exposé?',
       preston: { label: 'Shut it down', line: 'Freedom of the press is a lovely idea for a press we do not own.', fx: { income: 1, happy: -6 } },
       dolores: { label: 'Print a correction, fix the thing', line: 'They were right about the boiler. Fix the boiler. Let them print that too.', fx: { cash: -10, happy: 6 } } },
     { id: 'small_fire', needs: { flag: 'no_drill' }, title: 'A small fire', setup: 'A small fire. In the break room. Everyone went toward it, to look.', ask: 'What happens after the fire?',
@@ -288,7 +289,7 @@
       dolores: { label: 'Evacuate, then drills forever', line: 'Everybody out. Then the drill. Then the drill every month, until they can do it asleep, because one day they might be.', fx: { cash: -15, happy: 5 } } },
     { id: 'elevator_music', needs: { flag: 'elevator_fixed' }, title: 'The elevator has music now', setup: 'Nobody installed it. It is just there. It is one song.', ask: 'What do you do with the music?',
       preston: { label: 'Sell the ad slot', line: 'Thirty seconds of audio, captive audience, four floors. Advertisers call that a dream.', fx: { income: 1, happy: -1 } },
-      dolores: { label: 'Let the lobbyists pick', line: 'A playlist. Everyone gets a song. The cat gets two; she pushed the button.', fx: { happy: 3 } } },
+      dolores: { label: 'Let the lobbyists pick', line: 'A playlist. Everyone gets a song. {Cat} gets two; {he} pushed the button.', fx: { happy: 3 } } },
     { id: 'lunch_truck', needs: { flag: 'long_lunch' }, title: 'A food truck found you', setup: 'A taco truck has started parking outside at noon. The lobbyists are, for once, early for something.', ask: 'What\'s the deal with the truck?',
       preston: { label: 'Charge it rent', line: 'Prime curb. Hungry crowd. Rent, plus a percentage, plus the good tacos for the office.', fx: { income: 2, happy: -2 } },
       dolores: { label: 'Give it the good corner', line: 'The sunny corner. Free. In exchange for nothing, which is what good neighbors charge. Lunch gets faster, and so does the afternoon.', fx: { income: 1, happy: 5 } } },
@@ -301,7 +302,7 @@
     { id: 'profile', needs: { happiness_above: 80 }, title: 'A magazine wants the story', setup: 'A journalist wants to profile TrickleTown. "The company town that works." She seems suspicious of the premise. So are you.', ask: 'Does she get the story?',
       preston: { label: 'Charge for the interview', line: 'Access is a product. Candor is a premium tier.', fx: { cash: 15, happy: -2 } },
       dolores: { label: 'Let the lobbyists talk', line: 'Point her at the lobbyists. Walk away. Whatever they say, you earned.', fx: { happy: 4 }, sets: 'profiled' } },
-    { id: 'profile_fallout', needs: { flag: 'profiled' }, title: 'The article is out', setup: 'It is mostly kind. It quotes the cat. Three other towns have called to ask how you did it.', ask: 'What do you tell the other towns?',
+    { id: 'profile_fallout', needs: { flag: 'profiled' }, title: 'The article is out', setup: 'It is mostly kind. It quotes {cat}. Three other towns have called to ask how you did it.', ask: 'What do you tell the other towns?',
       preston: { label: 'Sell them a consultancy', line: 'TrickleTown Solutions. A deck, a retainer, a lanyard.', fx: { cash: 20, happy: -1 } },
       dolores: { label: 'Tell them for free', line: 'Tell them. Build the clinic. Fix the walls. Listen. It is not a secret, which is why nobody believes it. They will send their new hires here to learn, and new hires buy lunch.', fx: { income: 2, happy: 7 } } },
     { id: 'thriving', needs: { happiness_above: 85 }, title: 'Nobody is sick', setup: 'The clinic is empty. The nurse is reading. Someone has started a running club, voluntarily, which is unsettling.', ask: 'What do you do with an empty clinic?',
@@ -312,7 +313,7 @@
       dolores: { label: 'Post the numbers in the lobby', line: 'Happiness and profit, on a board, every morning. If you are embarrassed by the numbers, change the numbers.', fx: { happy: 3 } } },
     { id: 'pool_party', needs: { upgrade: 'pool' }, title: 'Pool party', setup: 'The pool is small. The party is not.', ask: 'Who gets in the pool?',
       preston: { label: 'Sell tickets', line: 'A velvet rope, but wet. Admission, towels extra.', fx: { cash: 12, happy: -2 } },
-      dolores: { label: 'Open swim', line: 'Everybody in. The cat is a lifeguard. She did not apply; she was simply there.', fx: { happy: 8 } } },
+      dolores: { label: 'Open swim', line: 'Everybody in. {Cat} is a lifeguard. {He} did not apply; {he} was simply there.', fx: { happy: 8 } } },
     // Round five: every mark gets a card that comes back for it.
     { id: 'sale_stampede', needs: { flag: 'holiday_sale' }, title: 'The Thursday Sale stampede', setup: 'Fifteen percent off has drawn a crowd. The crowd is the lobbyists. They are shopping on the clock, which is the only time the sale is valid.', ask: 'What happens to the sale?',
       preston: { label: 'Raise prices Wednesday', line: 'Up fifteen Wednesday, down fifteen Thursday. The sale is real. The math is also real.', fx: { income: 2, happy: -4 } },
@@ -329,16 +330,16 @@
     { id: 'casual_thursday', needs: { flag: 'casual' }, title: 'Casual Thursday', setup: 'Casual Friday has crept into Thursday, as promised. Somebody wore a robe. It was a nice robe.', ask: 'How casual does it get?',
       preston: { label: 'Sell the company hoodie', line: 'Branded. Comfortable. Technically a uniform, legally a souvenir.', fx: { cash: 10, happy: -1 } },
       dolores: { label: 'Casual, all week', line: 'The roadmap ends here. Wear what you want. The robe stays, within reason.', fx: { happy: 4 } } },
-    { id: 'cat_strike', needs: { flag: 'cat_fee' }, title: 'The cat has gone on strike', setup: 'Comptroller has stopped accepting pets, paid or otherwise. She sits on the register. She stares.', ask: 'How do you end the cat\'s strike?',
-      preston: { label: 'Replace the cat', line: 'A new cat. A cheaper cat. A cat that charges more per pet.', fx: { income: 1, happy: -5 } },
-      dolores: { label: 'Refund the petting fees', line: 'Give the money back. Apologize to the cat. She will not accept it, but the lobbyists will notice you tried.', fx: { cash: -10, income: -1, happy: 5 } } },
+    { id: 'cat_strike', needs: { flag: 'cat_fee' }, title: '{Cat} has gone on strike', setup: '{Cat} has stopped accepting pets, paid or otherwise. {He} sits on the register. {He} stares.', ask: 'How do you end the strike?',
+      preston: { label: 'Dock {his} treats', line: '{Cat} is on half rations until {he} clocks back in. {He} will remember this.', fx: { income: 1, happy: -5 } },
+      dolores: { label: 'Refund the petting fees', line: 'Give the money back. Apologize to {cat}. {He} will not accept it, but the lobbyists will notice you tried.', fx: { cash: -10, income: -1, happy: 5 } } },
     { id: 'lunch_smuggling', needs: { flag: 'short_lunch' }, title: 'Lunch is being smuggled', setup: 'Thirty-minute lunches have produced a black market in sandwiches. There is a guy. Everyone knows the guy.', ask: 'What do you do about the sandwiches?',
       preston: { label: 'Bag checks at the door', line: 'Random bag checks. For sandwiches. HR has volunteered. HR is very excited.', fx: { income: 1, happy: -4 } },
       dolores: { label: 'Give the hour back', line: 'An hour. The guy retires. Everyone eats sitting down, like people.', fx: { income: -1, happy: 5 }, sets: 'long_lunch' } },
     { id: 'stair_fall', needs: { flag: 'stairs' }, title: 'Someone fell on the stairs', setup: 'Cardio claimed a victim. He is fine. He is also, as of this morning, represented.', ask: 'How do you handle the claim?',
       preston: { label: 'Make everyone sign a waiver', line: 'Everyone signs a stair waiver. Retroactively. The lawyer says that is fine and the lawyer is on retainer.', fx: { cash: 2, happy: -6 } },
       dolores: { label: 'Fix the elevator, finally', line: 'Fix it. Pay the man. Put a plaque on the elevator that says "finally."', fx: { cash: -22, happy: 6 }, sets: 'elevator_fixed' } },
-    { id: 'newsletter_nobody', needs: { flag: 'newsletter_ads' }, title: 'Nobody reads the newsletter', setup: 'Issue three was entirely about the Company Store. Issue four, also. Readership is one, and it is the cat, and she is using it as a mat.', ask: 'What do you do with a newsletter nobody reads?',
+    { id: 'newsletter_nobody', needs: { flag: 'newsletter_ads' }, title: 'Nobody reads the newsletter', setup: 'Issue three was entirely about the Company Store. Issue four, also. Readership is one, and it is {cat}, and {he} is using it as a mat.', ask: 'What do you do with a newsletter nobody reads?',
       preston: { label: 'Make reading it mandatory', line: 'A quiz. Weekly. Scores are posted. The newsletter has never been more read, technically.', fx: { income: 1, happy: -3 } },
       dolores: { label: 'Hand it to the lobbyists', line: 'Let them write it. They will write about you. That is what a newsletter is for.', fx: { happy: 3 }, sets: 'newsletter_free' } },
     { id: 'dental_day', needs: { upgrade: 'dental' }, title: 'Free dental day', setup: 'The dental wing is offering a free day. The line is around the block. Everyone is smiling, carefully.', ask: 'What does free dental day include?',
@@ -346,6 +347,84 @@
       dolores: { label: 'Floss for everyone', line: 'Floss. Toothbrushes. A pamphlet that is actually read. Teeth, finally, in the budget.', fx: { happy: 6 } } },
   ];
   const BY_ID = new Map(ISSUES.map((i) => [i.id, i]));
+
+  // --- The cat ---------------------------------------------------------------
+  // Arrives on day two (the 'cat' card); either answer keeps her. You name
+  // her, pick he or she and a coat, and then you can spend a truly stupid
+  // amount of money on her wardrobe. Outfits do nothing. That's the point.
+  const CAT_COATS = ['tabby', 'black', 'gray', 'calico', 'white'];
+  // cost in $K. One item per slot is worn at a time.
+  const CAT_ITEMS = [
+    { id: 'bow_tie', slot: 'neck', name: 'Silk bow tie', cost: 15, blurb: 'Hand-tied by a man who only ties bows.' },
+    { id: 'monocle', slot: 'eyes', name: 'Monocle', cost: 25, blurb: 'For reading the fine print. The cat does not read.' },
+    { id: 'beret', slot: 'head', name: 'Cashmere beret', cost: 40, blurb: 'Has been to Paris. Did not care for it.' },
+    { id: 'blazer', slot: 'body', name: 'Tiny company blazer', cost: 60, blurb: 'Navy, with the crest. Tailored twice: the first tailor was bitten.' },
+    { id: 'pearls', slot: 'neck', name: 'Pearl collar', cost: 90, blurb: 'Each pearl was, at one point, inside something else.' },
+    { id: 'sunglasses', slot: 'eyes', name: 'Designer sunglasses', cost: 150, blurb: 'The logo is most of the lens.' },
+    { id: 'top_hat', slot: 'head', name: 'Silk top hat', cost: 200, blurb: 'Collapsible. Has never once been collapsed.' },
+    { id: 'gold_chain', slot: 'neck', name: 'Gold chain', cost: 300, blurb: 'Twenty-four karat. Heavier than advised.' },
+    { id: 'tiara', slot: 'head', name: 'Diamond tiara', cost: 500, blurb: 'Formerly a duchess’s. The duchess is fine. Mostly.' },
+    { id: 'cape', slot: 'body', name: 'Ermine cape', cost: 750, blurb: 'Velvet lining, ermine trim, and a train two lobbyists carry.' },
+    { id: 'crown', slot: 'head', name: 'Solid gold crown', cost: 1000, blurb: 'Real gold, real jewels, a real monarchy’s worth of paperwork.' },
+  ];
+  const CAT_BY_ID = new Map(CAT_ITEMS.map((x) => [x.id, x]));
+  const CAT_DEFAULT_NAME = 'Comptroller';
+  const newCat = (day) => ({ name: null, pronoun: 'she', coat: 'tabby', owned: [], wearing: {}, spent: 0, since: day || null });
+
+  // Card text names the cat: {Cat}/{cat} is the name (or "The cat"/"the
+  // cat" before there is one), and {He} {he} {him} {his} follow the pronoun.
+  function catWords(cat, text) {
+    if (!text || text.indexOf('{') < 0) return text;
+    const name = cat && cat.name;
+    const she = !cat || cat.pronoun !== 'he';
+    const w = { Cat: name || 'The cat', cat: name || 'the cat', He: she ? 'She' : 'He', he: she ? 'she' : 'he', him: she ? 'her' : 'him', his: she ? 'her' : 'his' };
+    return text.replace(/\{(Cat|cat|He|he|him|his)\}/g, (_, k) => w[k]);
+  }
+
+  // A cat's name: letters, numbers, spaces and . ' - only; 1 to 20 of them.
+  function cleanCatName(raw) {
+    const name = String(raw == null ? '' : raw).normalize('NFC').replace(/\s+/g, ' ').trim();
+    if (!name) return { error: 'Give the cat a name.' };
+    if ([...name].length > 20) return { error: 'Twenty characters at most. The badge is small.' };
+    if (!/^[\p{L}\p{N}][\p{L}\p{N} .'’-]*$/u.test(name)) return { error: 'Letters, numbers, spaces and . \' - only.' };
+    return { name };
+  }
+
+  function nameCat(t, { name, pronoun, coat } = {}) {
+    migrate(t);
+    if (!t.cat) return { error: 'There is no cat yet. She arrives on your second day.' };
+    const c = cleanCatName(name);
+    if (c.error) return c;
+    t.cat.name = c.name;
+    if (pronoun === 'he' || pronoun === 'she') t.cat.pronoun = pronoun;
+    if (CAT_COATS.includes(coat)) t.cat.coat = coat;
+    return { cat: t.cat };
+  }
+
+  // Buying wears it straight away (replacing whatever was in that slot).
+  function buyCatItem(t, itemId, cashAvailable) {
+    migrate(t);
+    if (!t.cat) return { error: 'There is no cat yet.' };
+    if (!t.cat.name) return { error: 'Name the cat first. It is the least you can do.' };
+    const it = CAT_BY_ID.get(itemId);
+    if (!it) return { error: 'No such item.' };
+    if (t.cat.owned.includes(it.id)) return { error: 'Already in the wardrobe.' };
+    if (!canPay(cashAvailable, it.cost)) return { error: `${it.name} costs $${it.cost}K. You have ${kStr(cashAvailable)} on the coin.` };
+    t.cat.owned.push(it.id);
+    t.cat.wearing[it.slot] = it.id;
+    t.cat.spent = Math.round(((t.cat.spent || 0) + it.cost) * 100) / 100;
+    return { cash: charge(cashAvailable, it.cost), item: it.id };
+  }
+
+  function wearCatItem(t, itemId, on) {
+    migrate(t);
+    if (!t.cat) return { error: 'There is no cat yet.' };
+    const it = CAT_BY_ID.get(itemId);
+    if (!it || !t.cat.owned.includes(it.id)) return { error: 'Not in the wardrobe.' };
+    if (on) t.cat.wearing[it.slot] = it.id;
+    else if (t.cat.wearing[it.slot] === it.id) delete t.cat.wearing[it.slot];
+    return { cat: t.cat };
+  }
   const ALL_UPGRADES = {};
   for (const slot of Object.keys(PLOTS)) for (const [bk, b] of Object.entries(PLOTS[slot].options)) for (const [uk, u] of Object.entries(b.upgrades)) ALL_UPGRADES[uk] = { ...u, key: uk, slot, building: bk };
 
@@ -377,6 +456,12 @@
       t.sides = { preston: 0, dolores: 0 };
       for (const i of t.issues || []) if (i.chosen === 'preston' || i.chosen === 'dolores') t.sides[i.chosen] += 1;
     }
+    // The cat. Towns that met her before naming existed get her as Comptroller,
+    // the name the cards always used.
+    if (!t.cat && ((t.played || []).includes('cat') || (t.flags || []).some((f) => f === 'cat_fee' || f === 'cat_mascot'))) {
+      t.cat = { ...newCat((t.last || {}).cat || t.day), name: CAT_DEFAULT_NAME };
+    }
+    if (t.cat) { if (!Array.isArray(t.cat.owned)) t.cat.owned = []; if (!t.cat.wearing || typeof t.cat.wearing !== 'object') t.cat.wearing = {}; }
     // Which side you took on each card, last time you played it, for the deck.
     if (!t.choices) {
       t.choices = {};
@@ -501,7 +586,8 @@
     const unlocked = unlockedCards(t, ctx);
     const recurring = (i) => EMERGENT.some((k) => i.needs[k] != null);
     const order = (list, salt) => [...list].sort((a, b) => hash(`${ctx.day}:${ctx.uid}:${salt}:${a.id}`) - hash(`${ctx.day}:${ctx.uid}:${salt}:${b.id}`));
-    const pool = order(unlocked.filter((i) => !played.has(i.id)), 'p');
+    // A pinned card (the cat) always makes the day's hand once it's unlocked.
+    const pool = order(unlocked.filter((i) => !played.has(i.id)), 'p').sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0));
     const again = order(unlocked.filter((i) => played.has(i.id) && recurring(i) && (!(t.last || {})[i.id] || dayDiff(t.last[i.id], ctx.day) >= RECUR_DAYS)), 'a');
     const want = Math.min(MAX_TOWN_CARDS, Math.max(2, Math.ceil(pool.length / 2)));
     const town = [...pool, ...again].slice(0, want);
@@ -680,6 +766,7 @@
     slot.chosen = side;
     t.sides[side] = (t.sides[side] || 0) + 1;
     t.choices[issueId] = { side, day: t.day };
+    if (issueId === 'cat' && !t.cat) t.cat = newCat(t.day);
     if (!t.played.includes(issueId)) t.played.push(issueId);
     t.last[issueId] = t.day;
     const sets = BY_ID.get(issueId)[side].sets || null;
@@ -754,7 +841,8 @@
   // What the client needs to draw the village and the panel.
   function view(t, ctx = {}) {
     migrate(t);
-    const sideView = (i, k) => ({ label: i[k].label, line: i[k].line, clues: clues(i[k].fx), cost: Math.max(0, -cardCost(t, i[k].fx)), later: laterOf(i[k]) });
+    const say = (text) => catWords(t.cat, text);
+    const sideView = (i, k) => ({ label: say(i[k].label), line: say(i[k].line), clues: clues(i[k].fx), cost: Math.max(0, -cardCost(t, i[k].fx)), later: laterOf(i[k]) });
     return {
       day: t.day,
       happiness: t.happiness,
@@ -764,6 +852,7 @@
       unlock_at: UNLOCK_AT,
       motto: motto(t),
       report: t.report,
+      cat: t.cat ? { name: t.cat.name, pronoun: t.cat.pronoun, coat: t.cat.coat, owned: [...t.cat.owned], wearing: { ...t.cat.wearing }, spent: t.cat.spent || 0, since: t.cat.since } : null,
       plots: Object.entries(PLOTS).map(([slot, p]) => {
         const b = building(slot, t.plots[slot]);
         return {
@@ -798,14 +887,14 @@
       issues: (t.issues || []).map((s) => {
         const i = BY_ID.get(s.id);
         if (!i) return null;
-        return { id: i.id, title: i.title, setup: i.setup, ask: i.ask || '', general: !i.needs, chosen: s.chosen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), preston: sideView(i, 'preston'), dolores: sideView(i, 'dolores') };
+        return { id: i.id, title: say(i.title), setup: say(i.setup), ask: say(i.ask || ''), general: !i.needs, chosen: s.chosen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), preston: sideView(i, 'preston'), dolores: sideView(i, 'dolores') };
       }).filter(Boolean),
       // The whole collection, for the deck view.
       deck: ISSUES.map((i) => {
         const slot = (t.issues || []).find((s) => s.id === i.id);
         const status = slot ? (slot.chosen ? 'played' : 'today') : (needsMet(i.needs, t, ctx) || adminOpen(t, i.id)) ? 'available' : 'locked';
         const seen = t.played.includes(i.id);
-        return { id: i.id, title: i.title, general: !i.needs, status, needs: needsText(i.needs, t, ctx), seen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), forced: adminOpen(t, i.id),
+        return { id: i.id, title: say(i.title), general: !i.needs, status, needs: needsText(i.needs, t, ctx), seen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), forced: adminOpen(t, i.id),
           // What you chose last time, for the deck's look-back. (Older towns
           // know that a card was played, and when, but not which side.)
           choice: seen || status === 'played' ? (t.choices[i.id] || null) : null, last: seen ? (t.last[i.id] || null) : null };
@@ -813,5 +902,5 @@
     };
   }
 
-  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, view, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch };
+  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, view, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch, CAT_ITEMS, CAT_COATS, catWords, cleanCatName, nameCat, buyCatItem, wearCatItem };
 }));

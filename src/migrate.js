@@ -186,6 +186,8 @@ CREATE TABLE IF NOT EXISTS wall_posts (
 CREATE INDEX IF NOT EXISTS wall_posts_owner ON wall_posts (owner_id, created_at DESC);
 -- When the owner last looked at their own wall, for the "new on your wall" dot.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS wall_seen_at TIMESTAMPTZ;
+-- When the player last dismissed "so-and-so added you" (adding back also clears one).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS followers_seen_at TIMESTAMPTZ;
 
 `;
 
