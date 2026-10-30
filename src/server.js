@@ -5,6 +5,7 @@ const { migrate } = require('./migrate');
 const routes = require('./routes');
 const maturer = require('./maturer');
 const housekeeping = require('./housekeeping');
+const sampler = require('./sampler');
 const assets = require('./assets');
 const { pool } = require('./db');
 const auth = require('./auth');
@@ -60,6 +61,7 @@ migrate()
     assets.start(pool);
     maturer.start(cfg.maturePollMs);
     housekeeping.start();
+    sampler.start();
     app.listen(cfg.port, () => {
       console.log(`Trickle Down API on :${cfg.port} (prices: ${cfg.priceProvider}, tz: ${cfg.gameTz}, hold: ${cfg.holdHours}h)`);
     });

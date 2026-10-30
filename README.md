@@ -115,19 +115,25 @@ card's unlock status for the deck grid.
 | GET | `/assets/search?q=` | | up to 25 matches from the universe, ranked: exact ticker, ticker prefix, name prefix, name word, name contains |
 | GET | `/quote/:symbol` | | live price + day change; `?fresh=1` asks for one no older than `FRESH_QUOTE_MS` |
 | GET | `/quotes?symbols=A,B,C` | | up to 12 at once, same `?fresh=1`; what the front end's live ticker polls |
-| GET | `/charities` | | active charities (`src/charities.js`) |
+| GET | `/charities` | | active charities (`src/charities.js`), with `donate` (the charity's own giving page) |
 | POST | `/auth/guest` | | create a guest account, returns a token |
 | POST | `/auth/register` | | username + password |
 | POST | `/auth/login` | | username + password |
 | POST | `/auth/claim` | ✓ | give a guest account a username + password |
-| GET | `/me` | ✓ | grants today's money if due (allowance plus the town's profit); portfolio with live values, history, today's crowd picks; `achievements` (earned/claimed/progress, newly earned ones recorded here); `fresh_cards`: titles of cards that unlocked since the last look and were added to today's agenda |
+| GET | `/me` | ✓ | grants today's money if due (allowance plus the town's profit); portfolio with live values, history, today's crowd picks; `achievements` (earned/claimed/progress, newly earned ones recorded here); `fresh_cards`: titles of cards that unlocked since the last look and were added to today's agenda; `user.last_seen_at` is the visit *before* this one and `town.expired_yesterday` the cards left unplayed yesterday (for "While you were out") |
+| GET | `/positions/review?ids=1,2` | ✓ | the welcome-back performance review: for your own matured positions in `ids` (up to 40), plus your live ones over the same stretch, each position's value from its buy to its 24-hour mark as `points: [[ms, dollars], ...]` (worked out from `price_log` with the coin's own math, thinned to ~90; matured lines end exactly at the frozen value); `start` is the earliest buy, `end` the latest maturity. Someone else's ids return nothing |
 | POST | `/buy` | ✓ | `{ symbol, amount }` |
 | GET | `/achievements` | ✓ | the trophy case: every achievement with gift, giver, earned/claimed dates and progress; records anything newly earned |
 | POST | `/achievements/claim` | ✓ | `{ key, charity_id? }` — take an earned achievement's gift from Mommy & Daddy: pure profit, taxed like any win, so it hires lobbyists (`charity_id` only matters before the player has a default). Recorded as a closed `gift` position |
 | POST | `/vest` | ✓ | older clients: same as claiming `first_buy` (the day-one gift, `VEST_AMOUNT`) |
 | POST | `/sell` | ✓ | `{ position_id, charity_id? }` — collects a matured position in full, or sells a live one early. `charity_id` (here, on `/vest` and on `/ride`) only matters when the player has no default charity yet: it becomes the default. With a default set, new lobbyists always go there |
 | POST | `/ride` | ✓ | `{ position_id, charity_id? }` — let a matured position ride: profit taxed at half rate now (the other half deferred), the rest becomes a fresh 24h position in the same asset at today's price with the multiplier climbing from where it ended |
-| GET | `/trickle` | | per-charity shares this quarter + all time |
+| GET | `/trickle` | | per-charity shares this quarter + all time, with `rank`, `gap_to_next` (lobbyists behind the charity one place up; 0 for the leader) and `donate` |
+| GET | `/lobbyfests` | | past Lobbyfests, newest first: quarter, paid date, pot (real dollars), receipt link, notes, and each charity's lobbyists and dollars |
+| GET | `/events/current` | | events running today (`featured_charity`: lobbyists hired for that charity count ×`multiplier`, 1.25 by default) |
+| GET | `/push/key` | | the VAPID public key for daily reminders (null when they're not set up) and the hour they go out |
+| POST | `/push/subscribe` | ✓ | `{ subscription, tz }` — turn on the daily reminder for this device. The endpoint must be a real push service (FCM, Mozilla, Apple, Windows); five devices a player |
+| POST | `/push/unsubscribe` | ✓ | `{ endpoint? }` — this device, or all of yours |
 | POST | `/town/decide` | ✓ | `{ issue_id, side }` — play one of today's cards with Preston's or Dolores's answer; returns the real `fx` and `crowd` (how everyone else answered it today) |
 | POST | `/town/build` | ✓ | `{ slot, key }` — put a building on a plot ($40); replacing one clears its upgrades |
 | POST | `/town/upgrade` | ✓ | `{ slot, key }` — buy an upgrade for the building on a plot |
@@ -135,8 +141,9 @@ card's unlock status for the deck grid.
 | POST | `/lobbyists/assign` | yes | `{ allocation?: [{ charity_id, amount }], default_charity_id? }` — move this quarter's lobbyists between charities (the allocation must account for every one) and/or change the default charity new hires go to |
 | GET | `/friends` | ✓ | your friends with quarter/career headcount, streak, rank, town mood; `added_you` = how many players added you |
 | POST | `/friends/add` | ✓ | `{ username }` — one-directional; cap 50 |
+| POST | `/friends/invite` | ✓ | `{ from }` — a new player starts out following whoever's link brought them (`?from=`). One direction only, the same row "Add friend" makes; the inviter sees "added you" |
 | POST | `/friends/remove` | ✓ | `{ username }` |
-| GET | `/players/:username` | opt | a player's public sheet: open positions with live values, headcounts, rank, cash in play, favourite charity, town summary, `is_friend` / `added_you` for the viewer |
+| GET | `/players/:username` | opt | a player's public sheet: open positions with live values, headcounts, rank, cash in play, favourite charity, town summary, `is_friend` / `added_you` for the viewer. If the owner played "Hide the meters" (card 66) in the last 7 days, everyone else gets `happiness`, `income` and `hire_cost` as null and `meters_hidden: true` (the friends list nulls `town.happiness` the same way) |
 
 | POST | `/auth/google` | | `{ credential }` — sign in or up with a Google ID token |
 | POST | `/auth/link-google` | ✓ | `{ credential }` — attach Google to the signed-in account (claims a guest) |
@@ -153,6 +160,11 @@ card's unlock status for the deck grid.
 | GET | `/admin/lobbyists?username=` | admin | a player's lobbyists this quarter, by charity |
 | POST | `/admin/lobbyists/remove` | admin | `{ username, take: [{ charity_id, amount }], dry_run? }` — gone, not moved: off this quarter and the all-time count |
 | POST | `/admin/users/remove` | admin | `{ usernames: [...], confirm, dry_run? }` — delete accounts and everything of theirs; `confirm` is the username (one) or the count (several). Never admins |
+| POST | `/admin/lobbyfests` | admin | `{ quarter, paid_at?, pot, receipt_url?, notes?, payouts: [{ charity_id, lobbyists, usd }] }` — enter (or replace) a quarter's Lobbyfest |
+| POST | `/admin/lobbyfests/delete` | admin | `{ quarter }` |
+| GET | `/admin/events` | admin | the last 30 events, past and future |
+| POST | `/admin/events` | admin | `{ kind: 'featured_charity', charity_id, starts_on, ends_on, multiplier?, title?, blurb? }` — a month at most, ×1 to ×3 |
+| POST | `/admin/events/delete` | admin | `{ id }` — end it now; lobbyists already hired keep their count |
 | GET | `/auth/options` | | whether Google sign-in is on, and the client id |
 
 Auth is a Bearer JWT (HS256) in the `Authorization` header. Tokens last 180
@@ -241,6 +253,13 @@ freeze at their entry price and can be collected.
   selling inside a minute sees the same price. That's intended.
 - With no `FINNHUB_API_KEY`, the server runs with `PRICE_PROVIDER=mock`:
   deterministic made-up prices that drift, so you can develop offline.
+- The price sampler (`src/sampler.js`) keeps `price_log` dense enough to chart:
+  every `SAMPLE_POLL_MS` (2 min) while the web dyno is awake, and on every run
+  of the 10-minute scheduler job, it logs a fresh price for every symbol
+  someone holds live, stalest first, aiming for one row per symbol every
+  `SAMPLE_EVERY_MS` (10 min). Stocks are capped per pass (`SAMPLE_BATCH`, 8;
+  20 in the scheduler job) and always leave 25 Finnhub calls a minute for
+  players; coins are one CoinGecko call. The welcome-back review draws from it.
 
 The free Finnhub tier is plenty for a demo. If the site grows, the cheap
 upgrade is a nightly job that stores daily closes, which also enables a true
@@ -290,8 +309,11 @@ src/server.js     express app, CORS, boot-time migrate
 src/routes.js     every endpoint
 src/game.js       the rules as pure functions (day keys, multiplier ramp, value, tax, tiers, ranks)
 src/maturer.js    freezes positions at maturity (scheduler one-off, timer, lazy), late-freeze backstop
-src/pricelog.js   a week of every quote the game fetched, for late freezes
-scripts/mature.js the Heroku Scheduler job: freeze everything due, exit
+src/pricelog.js   a week of every quote the game fetched, for late freezes and the review chart
+src/sampler.js    logs held symbols' prices on a schedule, so the overnight chart has points
+scripts/mature.js the Heroku Scheduler job: freeze everything due, sample prices, exit
+scripts/refreeze.js  one-off repair: re-freeze positions the old scheduler froze at cost (dry run; --apply)
+scripts/notify.js the hourly daily-reminder job (web push; needs the VAPID_* vars)
 src/prices.js     Finnhub / CoinGecko / mock, with a cache
 src/assets.js     the curated tradable list
 src/charities.js  the curated charity list (seeded into the DB)

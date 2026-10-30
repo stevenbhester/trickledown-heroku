@@ -206,6 +206,21 @@ function start(db) {
 
 function find(symbol) { return universe.get(String(symbol || '').toUpperCase()) || null; }
 
+// Whether "not in the list" really means "taken out of the game". Until the
+// full list has loaded (a fresh process, a one-off job), only the curated
+// symbols are known, and everything else is merely not loaded yet.
+function ready() {
+  return loadedFrom !== 'curated' || cfg.priceProvider !== 'live' || cfg.assetUniverse !== 'all';
+}
+
+// An asset to quote a position by: the listed one, or, before the full list
+// has loaded, a stand-in built from the position itself.
+function forPosition(p) {
+  const a = find(p.symbol);
+  if (a || ready()) return a;
+  return { symbol: String(p.symbol).toUpperCase(), name: p.name || p.symbol, type: p.asset_type === 'crypto' ? 'crypto' : 'stock' };
+}
+
 // Ranked: exact ticker, ticker prefix, name starts with, a word of the name
 // starts with, name contains. Featured first within a rank, then shorter
 // tickers (AAPL before AAPLW-style noise), then alphabetical.
@@ -233,6 +248,9 @@ module.exports = {
   CURATED,
   ASSETS: CURATED, // what the picker shows before you type (and the whole game without a live feed)
   find,
+  forPosition,
+  ready,
+  load: loadFromDb,
   search,
   size: () => universe.size,
   source: () => loadedFrom,

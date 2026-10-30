@@ -43,6 +43,13 @@ function finnhubAllowed() {
   return true;
 }
 
+// Calls left this minute, for background jobs that should leave most of the
+// budget to players.
+function budgetLeft() {
+  const m = Math.floor(Date.now() / 60e3);
+  return budget.minute === m ? Math.max(0, cfg.finnhubBudget - budget.used) : cfg.finnhubBudget;
+}
+
 async function finnhubQuote(symbol) {
   if (!cfg.finnhubKey) throw new Error('FINNHUB_API_KEY is not set');
   if (!finnhubAllowed()) throw new Error(`finnhub budget spent this minute (${cfg.finnhubBudget})`);
@@ -176,4 +183,4 @@ function peek(symbol) {
   return q && q.price > 0 ? { price: q.price, at: q.at || null } : null;
 }
 
-module.exports = { getQuote, getQuotes, peek };
+module.exports = { getQuote, getQuotes, peek, budgetLeft };

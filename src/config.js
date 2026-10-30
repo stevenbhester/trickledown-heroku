@@ -64,6 +64,15 @@ module.exports = {
 
   poolUsd: num(process.env.POOL_USD, 0),
 
+  // Daily reminders (web push). Without the keys, the feature is off: the page
+  // hides the toggle and scripts/notify.js does nothing. Generate a pair once
+  // with: npx web-push generate-vapid-keys
+  vapidPublic: (process.env.VAPID_PUBLIC || '').trim(),
+  vapidPrivate: (process.env.VAPID_PRIVATE || '').trim(),
+  vapidSubject: (process.env.VAPID_SUBJECT || '').trim(),
+  // The local hour (in each player's own time zone) the reminder goes out.
+  notifyHour: num(process.env.NOTIFY_HOUR, 17),
+
   // The charity list (src/charities.js) is real now, so the site no longer
   // says the charities are made up. DEMO_MODE=true brings that warning back,
   // for a test copy running with pretend charities.

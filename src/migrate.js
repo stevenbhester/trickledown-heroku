@@ -192,6 +192,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS followers_seen_at TIMESTAMPTZ;
 -- Real charities carry their EIN and the rating we checked them against.
 ALTER TABLE charities ADD COLUMN IF NOT EXISTS ein TEXT NOT NULL DEFAULT '';
 ALTER TABLE charities ADD COLUMN IF NOT EXISTS rating TEXT NOT NULL DEFAULT '';
+-- Where to give to the charity directly ("Give directly").
+ALTER TABLE charities ADD COLUMN IF NOT EXISTS donate TEXT NOT NULL DEFAULT '';
 
 -- Players asking for a charity that isn't on the list. Plain text, never HTML.
 CREATE TABLE IF NOT EXISTS charity_requests (
@@ -240,6 +242,52 @@ ALTER TABLE ledger ADD COLUMN IF NOT EXISTS charity_id INTEGER REFERENCES charit
 CREATE INDEX IF NOT EXISTS positions_opened_at ON positions (opened_at DESC);
 CREATE INDEX IF NOT EXISTS donations_position ON donations (position_id) WHERE position_id IS NOT NULL;
 
+-- Past Lobbyfests: what went out each quarter, to whom, and the receipt.
+CREATE TABLE IF NOT EXISTS lobbyfests (
+  id SERIAL PRIMARY KEY,
+  quarter TEXT NOT NULL UNIQUE,
+  paid_at DATE,
+  pot NUMERIC(12,2) NOT NULL DEFAULT 0,
+  receipt_url TEXT NOT NULL DEFAULT '' CHECK (char_length(receipt_url) <= 500),
+  notes TEXT NOT NULL DEFAULT '' CHECK (char_length(notes) <= 1000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS lobbyfest_payouts (
+  lobbyfest_id INTEGER NOT NULL REFERENCES lobbyfests(id) ON DELETE CASCADE,
+  charity_id INTEGER NOT NULL REFERENCES charities(id),
+  lobbyists NUMERIC(14,2) NOT NULL DEFAULT 0,
+  usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+  PRIMARY KEY (lobbyfest_id, charity_id)
+);
+
+-- Weekly beats. First kind: featured_charity (lobbyists hired for it count
+-- extra while it runs). No row, no event.
+CREATE TABLE IF NOT EXISTS events (
+  id SERIAL PRIMARY KEY,
+  kind TEXT NOT NULL,
+  starts_on DATE NOT NULL,
+  ends_on DATE NOT NULL,
+  charity_id INTEGER REFERENCES charities(id),
+  multiplier NUMERIC(5,2),
+  title TEXT NOT NULL DEFAULT '' CHECK (char_length(title) <= 120),
+  blurb TEXT NOT NULL DEFAULT '' CHECK (char_length(blurb) <= 500),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (ends_on >= starts_on)
+);
+CREATE INDEX IF NOT EXISTS events_window ON events (starts_on, ends_on);
+
+-- Daily reminders (web push), for players who turned them on.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE CHECK (char_length(endpoint) <= 1000),
+  keys JSONB NOT NULL,
+  tz TEXT NOT NULL DEFAULT 'America/Chicago',
+  last_sent_day TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS push_subscriptions_user ON push_subscriptions (user_id);
+
 `;
 
 async function migrate() {
@@ -256,12 +304,12 @@ async function migrate() {
   for (let i = 0; i < charities.length; i++) {
     const c = charities[i];
     await pool.query(
-      `INSERT INTO charities (slug, name, blurb, url, category, sort, active, ein, rating)
-       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)
+      `INSERT INTO charities (slug, name, blurb, url, category, sort, active, ein, rating, donate)
+       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9)
        ON CONFLICT (slug) DO UPDATE SET
          name = EXCLUDED.name, blurb = EXCLUDED.blurb, url = EXCLUDED.url,
-         category = EXCLUDED.category, sort = EXCLUDED.sort, active = true, ein = EXCLUDED.ein, rating = EXCLUDED.rating`,
-      [c.slug, c.name, c.blurb, c.url, c.category, i, c.ein || '', c.rating || ''],
+         category = EXCLUDED.category, sort = EXCLUDED.sort, active = true, ein = EXCLUDED.ein, rating = EXCLUDED.rating, donate = EXCLUDED.donate`,
+      [c.slug, c.name, c.blurb, c.url, c.category, i, c.ein || '', c.rating || '', c.donate || ''],
     );
   }
   // Anything no longer in the list is retired, not deleted: its donation

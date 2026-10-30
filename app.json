@@ -2,28 +2,123 @@
   "name": "Trickle Down API",
   "description": "Backend for Trickle Down, the daily charity day-trading game. Express + Postgres.",
   "repository": "https://github.com/stevenbhester/heroku-trickledown",
-  "keywords": ["node", "express", "postgres", "game"],
+  "keywords": [
+    "node",
+    "express",
+    "postgres",
+    "game"
+  ],
   "stack": "heroku-24",
-  "addons": [{ "plan": "heroku-postgresql:essential-0" }, { "plan": "scheduler:standard" }],
+  "addons": [
+    {
+      "plan": "heroku-postgresql:essential-0"
+    },
+    {
+      "plan": "scheduler:standard"
+    }
+  ],
   "env": {
-    "JWT_SECRET": { "description": "Signs login tokens. Keep it secret; changing it signs everyone out.", "generator": "secret" },
-    "CORS_ORIGIN": { "description": "Comma-separated origins allowed to call the API: your GitHub Pages URL and your custom domain.", "value": "https://stevenbhester.github.io,https://trickledown.stevenhester.com" },
-    "FINNHUB_API_KEY": { "description": "Free key from https://finnhub.io for stock prices. Leave blank to run with invented prices.", "required": false },
-    "COINGECKO_API_KEY": { "description": "Optional CoinGecko demo key; raises the crypto rate limit.", "required": false },
-    "GOOGLE_CLIENT_ID": { "description": "Optional Google OAuth Web client ID to enable Sign in with Google.", "required": false },
-    "ADMIN_USERNAMES": { "description": "Comma-separated usernames that get the Admin section (grant cash/lobbyists, reset) for testing.", "required": false },
-    "GAME_TZ": { "description": "The game day rolls over at local midnight in this zone.", "value": "America/Chicago" },
-    "LAUNCH_DATE": { "description": "Day 1 of the game, YYYY-MM-DD, for the day counter.", "value": "2026-11-01" },
-    "DEMO_MODE": { "description": "true while the charities are fictional; set false once src/charities.js lists real ones.", "value": "true" },
-    "POOL_USD": { "description": "Real ad revenue collected this quarter, shown on the Lobby page.", "value": "0" },
-    "RIDE_TAX_FACTOR": { "description": "Letting a winner ride is taxed at TAX_RATE times this (0.5 = half rate).", "value": "0.5", "required": false },
-    "GUEST_TTL_DAYS": { "description": "Guest accounts that never hired a lobbyist are deleted after this many idle days.", "value": "45", "required": false },
-    "TOWN_INCOME_CAP": { "description": "TrickleTown income can push the daily allowance past DAILY_CAP by at most this much.", "value": "40", "required": false },
-    "ASSET_UNIVERSE": { "description": "'all' = every US-listed stock/ETF plus the top coins, refreshed daily (needs a Finnhub key); 'curated' = just the hand-picked list.", "value": "all", "required": false },
-    "CRYPTO_TOP": { "description": "How many coins by market cap to include from CoinGecko.", "value": "250", "required": false },
-    "FINNHUB_BUDGET": { "description": "Outbound Finnhub calls per minute we allow ourselves. Raise it on a paid Finnhub tier.", "value": "50", "required": false },
-    "FRESH_QUOTE_MS": { "description": "How old a 'fresh' quote for the live ticker may be before asking the provider again.", "value": "4000", "required": false },
-    "VEST_AMOUNT": { "description": "Day one's windfall: pure profit from vested shares after the first buy (0 disables).", "value": "40", "required": false },
-    "RIDE_MAX_STEPS": { "description": "How many rides keep raising the multiplier (stocks ×10 → ×20 → ×30) before it runs flat.", "value": "2", "required": false }
+    "JWT_SECRET": {
+      "description": "Signs login tokens. Keep it secret; changing it signs everyone out.",
+      "generator": "secret"
+    },
+    "CORS_ORIGIN": {
+      "description": "Comma-separated origins allowed to call the API: your GitHub Pages URL and your custom domain.",
+      "value": "https://stevenbhester.github.io,https://trickledown.stevenhester.com"
+    },
+    "FINNHUB_API_KEY": {
+      "description": "Free key from https://finnhub.io for stock prices. Leave blank to run with invented prices.",
+      "required": false
+    },
+    "COINGECKO_API_KEY": {
+      "description": "Optional CoinGecko demo key; raises the crypto rate limit.",
+      "required": false
+    },
+    "GOOGLE_CLIENT_ID": {
+      "description": "Optional Google OAuth Web client ID to enable Sign in with Google.",
+      "required": false
+    },
+    "ADMIN_USERNAMES": {
+      "description": "Comma-separated usernames that get the Admin section (grant cash/lobbyists, reset) for testing.",
+      "required": false
+    },
+    "GAME_TZ": {
+      "description": "The game day rolls over at local midnight in this zone.",
+      "value": "America/Chicago"
+    },
+    "LAUNCH_DATE": {
+      "description": "Day 1 of the game, YYYY-MM-DD, for the day counter.",
+      "value": "2026-11-01"
+    },
+    "DEMO_MODE": {
+      "description": "true while the charities are fictional; set false once src/charities.js lists real ones.",
+      "value": "true"
+    },
+    "POOL_USD": {
+      "description": "Real ad revenue collected this quarter, shown on the Lobby page.",
+      "value": "0"
+    },
+    "RIDE_TAX_FACTOR": {
+      "description": "Letting a winner ride is taxed at TAX_RATE times this (0.5 = half rate).",
+      "value": "0.5",
+      "required": false
+    },
+    "GUEST_TTL_DAYS": {
+      "description": "Guest accounts that never hired a lobbyist are deleted after this many idle days.",
+      "value": "45",
+      "required": false
+    },
+    "TOWN_INCOME_CAP": {
+      "description": "TrickleTown income can push the daily allowance past DAILY_CAP by at most this much.",
+      "value": "40",
+      "required": false
+    },
+    "ASSET_UNIVERSE": {
+      "description": "'all' = every US-listed stock/ETF plus the top coins, refreshed daily (needs a Finnhub key); 'curated' = just the hand-picked list.",
+      "value": "all",
+      "required": false
+    },
+    "CRYPTO_TOP": {
+      "description": "How many coins by market cap to include from CoinGecko.",
+      "value": "250",
+      "required": false
+    },
+    "FINNHUB_BUDGET": {
+      "description": "Outbound Finnhub calls per minute we allow ourselves. Raise it on a paid Finnhub tier.",
+      "value": "50",
+      "required": false
+    },
+    "FRESH_QUOTE_MS": {
+      "description": "How old a 'fresh' quote for the live ticker may be before asking the provider again.",
+      "value": "4000",
+      "required": false
+    },
+    "VEST_AMOUNT": {
+      "description": "Day one's windfall: pure profit from vested shares after the first buy (0 disables).",
+      "value": "40",
+      "required": false
+    },
+    "RIDE_MAX_STEPS": {
+      "description": "How many rides keep raising the multiplier (stocks ×10 → ×20 → ×30) before it runs flat.",
+      "value": "2",
+      "required": false
+    },
+    "VAPID_PUBLIC": {
+      "description": "Daily reminders (web push): the public key from `npx web-push generate-vapid-keys`. Leave blank to keep reminders off.",
+      "required": false
+    },
+    "VAPID_PRIVATE": {
+      "description": "Daily reminders: the private key from the same pair. Keep it secret.",
+      "required": false
+    },
+    "VAPID_SUBJECT": {
+      "description": "Daily reminders: a contact for the push services, like mailto:you@example.com.",
+      "required": false
+    },
+    "NOTIFY_HOUR": {
+      "description": "The local hour (0-23, in each player's time zone) the daily reminder goes out.",
+      "value": "17",
+      "required": false
+    }
   }
 }

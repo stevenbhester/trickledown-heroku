@@ -27,12 +27,12 @@ async function settleMatured(rows) {
   const due = rows.filter((p) => p.status === 'open' && !p.matured_at && p.matures_at && new Date(p.matures_at).getTime() <= now);
   if (!due.length) return 0;
 
-  const quotes = await prices.getQuotes(due.map((p) => assets.find(p.symbol)).filter(Boolean));
+  const quotes = await prices.getQuotes(due.map((p) => assets.forPosition(p)).filter(Boolean));
   pricelog.record(quotes).catch((e) => console.warn('pricelog:', e.message));
   let n = 0;
   for (const p of due) {
     const maturesAt = new Date(p.matures_at).getTime();
-    const listed = !!assets.find(p.symbol);
+    const listed = !!assets.forPosition(p);
     let price = null, late = false;
     if (!listed) {
       // Taken out of the game since it was bought: freeze at what went in, so

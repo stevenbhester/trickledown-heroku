@@ -319,6 +319,98 @@ ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
   ok('Lobbyfest split: $100 minimum, proportional, under-$5 left out and rerun, cents add up');
 }
 
+// --- Card 66: hiding the meters wears off; posting cancels hiding ----------------
+{
+  const t = Town.fresh();
+  Town.tick(t, { day: '2026-11-01', unlocked: true, uid: 1 });
+  t.issues = [{ id: 'followers', chosen: null }];
+  assert(!Town.metersHidden(t));
+  assert(!Town.decide(t, 'followers', 'preston', 100).error);
+  assert(Town.metersHidden(t) && t.last.meters_hidden === '2026-11-01', 'Preston hides the meters, dated');
+  assert(Town.metersHidden(t, '2026-11-07') && !Town.metersHidden(t, '2026-11-08'), 'by date alone, even if the town never ticks');
+  Town.tick(t, { day: '2026-11-07', unlocked: true, uid: 1 });
+  assert(Town.metersHidden(t), 'still hidden on day six');
+  Town.tick(t, { day: '2026-11-08', unlocked: true, uid: 1 });
+  assert(!Town.metersHidden(t) && !t.last.meters_hidden, 'shown again after seven days');
+  t.issues = [{ id: 'followers', chosen: null }];
+  Town.decide(t, 'followers', 'preston', 100);
+  t.issues = [{ id: 'followers', chosen: null }];
+  Town.decide(t, 'followers', 'dolores', 100);
+  assert(!Town.metersHidden(t) && t.flags.includes('meters_posted'), 'posting the numbers cancels hiding them');
+  // "buy the actual pool", not "buy the the actual pool".
+  const built = Town.fresh(); built.plots.housing = 'pinnacle'; built.built.housing = '2026-10-01';
+  const needs = Town.view(built, { day: '2026-11-01', unlocked: true }).deck.map((c) => c.needs).join(' ');
+  assert(needs.includes('buy the actual pool') && !/the the /i.test(needs), 'no "the the" in unlock text');
+  ok('card 66: meters hidden for seven days, posting cancels; no "the the"');
+}
+
+// --- 4.2: cards that buy an upgrade ---------------------------------------------
+{
+  const t = Town.fresh();
+  t.plots.housing = 'pinnacle'; t.built.housing = '2026-10-20';
+  Town.tick(t, { day: '2026-11-01', unlocked: true, uid: 1 });
+  t.issues = [{ id: 'amenity_fee', chosen: null }];
+  const view = Town.view(t, { day: '2026-11-01', unlocked: true });
+  assert.strictEqual(view.issues[0].dolores.cost, 40, 'the card shows the pool\'s price');
+  assert.strictEqual(Town.decide(t, 'amenity_fee', 'dolores', 30).error.includes('costs $40K'), true, 'not enough cash: the pool\'s price');
+  const r = Town.decide(t, 'amenity_fee', 'dolores', 100);
+  assert(!r.error && r.cash === -40 && t.upgrades.housing.includes('pool'), 'Dolores builds the actual pool, for its price');
+  const ctx = { day: '2026-11-02', unlocked: true, uid: 1, lobbyists: 10, cash: 100 };
+  assert(!Town.needsMet({ building: 'pinnacle', not_upgrade: 'pool' }, t, ctx), 'not_upgrade: closed once the pool exists');
+  t.played = []; // even unplayed, it isn't dealt once the pool is owned
+  for (let d = 2; d < 12; d++) { Town.tick(t, { ...ctx, day: `2026-11-${String(d).padStart(2, '0')}` }); assert(!t.issues.some((i) => i.id === 'amenity_fee'), 'amenity_fee dealt after the pool was bought'); }
+  // The billing department, same way, on the clinic.
+  const c = Town.fresh(); c.plots.square = 'clinic'; c.built.square = '2026-10-20';
+  Town.tick(c, { day: '2026-11-01', unlocked: true, uid: 2 });
+  c.issues = [{ id: 'clinic_bill', chosen: null }];
+  assert(!Town.decide(c, 'clinic_bill', 'preston', 100).error && c.upgrades.square.includes('billing'), 'Preston adds the billing department');
+  ok('cards 11 and 15 buy their upgrades at the upgrade price, then stop being dealt');
+}
+
+// --- 4.3: newer unlock types -----------------------------------------------------
+{
+  const t = Town.fresh();
+  const met = (needs, ctx) => Town.needsMet(needs, t, { day: '2026-11-06', ...ctx });
+  assert(met({ tier_yesterday: 'Rest in peace' }, { tiers_yesterday: ['Nice', 'Rest in peace'] }) && !met({ tier_yesterday: 'Rest in peace' }, { tiers_yesterday: ['Nice'] }) && !met({ tier_yesterday: 'Rest in peace' }, {}), 'tier_yesterday');
+  assert(met({ same_ticker_days: 5 }, { same_ticker_days: 5 }) && !met({ same_ticker_days: 5 }, { same_ticker_days: 4 }), 'same_ticker_days');
+  assert(met({ charity: true }, { charity_name: 'GiveDirectly' }) && !met({ charity: true }, {}), 'charity');
+  assert(met({ days_to_lobbyfest_max: 7 }, { days_to_lobbyfest: 7 }) && !met({ days_to_lobbyfest_max: 7 }, { days_to_lobbyfest: 8 }), 'days_to_lobbyfest_max');
+  assert(met({ weekday: 5 }, { weekday: 5 }) && !met({ weekday: 5 }, { weekday: 4 }), 'weekday');
+  assert(met({ month: 12 }, { month: 12 }) && !met({ month: 12 }, { month: 11 }), 'month');
+  // The deck's words for each.
+  const forced = Object.assign(Town.fresh(), { admin_all_open: true });
+  const deckText = Object.fromEntries(Town.view(forced, { day: '2026-11-06', unlocked: true }).deck.map((d) => [d.id, d.needs]));
+  assert.strictEqual(deckText.draft_rip, 'Happens the day after a position goes to zero.');
+  assert.strictEqual(deckText.draft_same_ticker, 'Unlock: buy the same stock 5 days running.');
+  assert.strictEqual(deckText.draft_charity, 'Unlock: choose a charity.');
+  assert.strictEqual(deckText.draft_lobbyfest_week, 'Happens in the last week before Lobbyfest.');
+  assert.strictEqual(deckText.draft_friday, 'Happens on Fridays.');
+  assert.strictEqual(deckText.draft_december, 'Happens in December.');
+  // Drafts are never dealt or shown to a player, even when they qualify.
+  const p = Town.fresh();
+  const all = { day: '2026-12-25', unlocked: true, uid: 3, tiers_yesterday: ['Rest in peace'], same_ticker_days: 9, charity_name: 'X', days_to_lobbyfest: 7, weekday: 5, month: 12 };
+  for (let d = 0; d < 20; d++) { Town.tick(p, { ...all, day: `2026-12-${String(5 + d).padStart(2, '0')}` }); assert(!p.issues.some((i) => /^draft_/.test(i.id)), 'a draft was dealt'); }
+  assert(!Town.view(p, all).deck.some((d) => /^draft_/.test(d.id)), 'a draft is in a player\'s deck');
+  // {Charity} in card text.
+  assert.strictEqual(Town.catWords(null, 'For {Charity}.', 'GiveDirectly'), 'For GiveDirectly.');
+  assert.strictEqual(Town.catWords(null, 'For {Charity}.'), 'For your charity.');
+  ok('newer unlock types: each predicate, its deck text, drafts kept out, {Charity}');
+}
+
+// --- The digest's "cards expired": every unplayed card from the day before ------
+{
+  const t = Town.fresh();
+  const c = { unlocked: true, uid: 9 };
+  Town.tick(t, { ...c, day: '2026-11-01' });
+  assert.strictEqual(t.report.expired, 0, 'first day: nothing expired');
+  const n = t.issues.length;
+  t.issues[0].chosen = 'preston';
+  Town.tick(t, { ...c, day: '2026-11-02' });
+  assert.strictEqual(t.report.expired, n - 1, 'the unplayed ones expired');
+  assert.strictEqual(Town.view(t, { ...c, day: '2026-11-02' }).expired_yesterday, n - 1);
+  ok('expired_yesterday counts yesterday\'s unplayed cards');
+}
+
 // --- The front end has the same file ------------------------------------------
 const fe = path.join(__dirname, '../../trickledown-stevenhester-com/js/town.js');
 if (fs.existsSync(fe)) {

@@ -49,7 +49,50 @@ const intId = (raw) => { const n = Number(raw); return Number.isInteger(n) && n 
 const adminName = (name) => cfg.adminUsernames.includes(String(name || '').toLowerCase());
 
 // What the town rules need to know about the player.
-const townCtx = (u, extra = {}) => ({ uid: u.id, cash: u.cash, lobbyists: u.total_donated, streak: u.streak, friends: u.friend_count || 0, unlocked: Town.isUnlocked(u.total_donated), ...extra });
+// The calendar a card can care about, from a game day key: weekday (0 =
+// Sunday), month (1-12), and days until Lobbyfest (midnight as the next
+// quarter begins; 7 on Dec 25, 1 on Dec 31).
+function calendarCtx(day) {
+  const d = new Date(`${day}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return {};
+  const y = d.getUTCFullYear(), m = d.getUTCMonth();
+  const fest = Date.UTC(m >= 9 ? y + 1 : y, m >= 9 ? 0 : (Math.floor(m / 3) + 1) * 3, 1, 12);
+  return { weekday: d.getUTCDay(), month: m + 1, days_to_lobbyfest: Math.round((fest - d.getTime()) / 86400e3) };
+}
+// u.town_extra (set by /me from townExtras) carries what needs a query:
+// yesterday's tiers, the longest same-stock run, the charity's name.
+const townCtx = (u, extra = {}) => ({
+  uid: u.id, cash: u.cash, lobbyists: u.total_donated, streak: u.streak, friends: u.friend_count || 0, unlocked: Town.isUnlocked(u.total_donated),
+  has_charity: !!u.charity_id, ...calendarCtx(extra.day || game.dayKey()), ...(u.town_extra || {}), ...extra,
+});
+async function townExtras(u, dayKey) {
+  const [{ rows: tiers }, { rows: buys }, { rows: [ch] }] = await Promise.all([
+    query('SELECT DISTINCT tier FROM positions WHERE user_id = $1 AND closed_day = $2 AND tier IS NOT NULL', [u.id, game.addDays(dayKey, -1)]),
+    query(`SELECT DISTINCT symbol, opened_day FROM positions
+            WHERE user_id = $1 AND rolled_from IS NULL AND status NOT IN ('vested', 'gift') AND opened_day >= $2
+            ORDER BY symbol, opened_day`, [u.id, game.addDays(dayKey, -90)]),
+    u.charity_id ? query('SELECT name FROM charities WHERE id = $1 AND active', [u.charity_id]) : Promise.resolve({ rows: [] }),
+  ]);
+  // The longest run of consecutive days buying one symbol.
+  let best = 0, run = 0, prev = null;
+  for (const r of buys) {
+    run = prev && prev.symbol === r.symbol && game.addDays(prev.opened_day, 1) === r.opened_day ? run + 1 : 1;
+    best = Math.max(best, run); prev = r;
+  }
+  return { tiers_yesterday: tiers.map((r) => r.tier), same_ticker_days: best, charity_name: ch ? ch.name : null };
+}
+
+// A featured charity this week counts its lobbyists extra: { multiplier,
+// title } while one is running for this charity, else null.
+async function featuredFor(db, charityId, dayKey) {
+  if (!charityId) return null;
+  const { rows: [e] } = await db.query(
+    `SELECT multiplier::float8 AS multiplier, title FROM events
+      WHERE kind = 'featured_charity' AND charity_id = $1 AND starts_on <= $2::date AND ends_on >= $2::date
+      ORDER BY id DESC LIMIT 1`, [charityId, dayKey],
+  );
+  return e ? { multiplier: e.multiplier > 1 ? e.multiplier : 1.25, title: e.title || '' } : null;
+}
 
 // One line in the admin's transaction feed, for money (or lobbyists) that
 // moves outside a position. Positions record buys, sales, rides and gifts.
@@ -203,7 +246,7 @@ function dayInfo(now = new Date()) {
 // The page checks this so a half-finished deploy (new page, old server) is
 // caught on sight instead of showing up as missing features. Bump it with any
 // release the page depends on; js/app.js API_WANTS must match.
-const API_VERSION = 11;
+const API_VERSION = 14;
 
 router.get('/health', (req, res) => res.json({ ok: true, api: API_VERSION, provider: cfg.priceProvider, google: google.enabled(), demo: cfg.demoMode }));
 
@@ -258,7 +301,7 @@ router.get('/quote/:symbol', RL.quote, wrap(async (req, res) => {
 }));
 
 router.get('/charities', wrap(async (req, res) => {
-  const { rows } = await query('SELECT id, slug, name, blurb, url, category, ein, rating FROM charities WHERE active ORDER BY sort, name');
+  const { rows } = await query('SELECT id, slug, name, blurb, url, category, ein, rating, donate FROM charities WHERE active ORDER BY sort, name');
   res.json({ charities: rows });
 }));
 
@@ -622,6 +665,10 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
   const day = dayInfo(now);
   let user = req.user;
   let allowance = null;
+  // The visit before this one, for "while you were out" (this request moves it to now).
+  const prevSeen = req.user.last_seen_at || null;
+  const extras = await townExtras(user, day.key).catch((e) => { console.warn('townExtras:', e.message); return {}; });
+  user.town_extra = extras;
 
   user.friend_count = await friendCount(user.id);
   if (user.last_allowance_day !== day.key) {
@@ -631,6 +678,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     const granted = await withTx(async (tx) => {
       const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [user.id]);
       u.friend_count = fc;
+      u.town_extra = extras;
       if (u.last_allowance_day === day.key) return { user: u, allowance: null };
       const yesterday = game.addDays(day.key, -1);
       const streak = u.last_allowance_day === yesterday ? u.streak + 1 : 1;
@@ -647,6 +695,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
         [amount, streak, day.key, u.id, { ...town, report }],
       );
       updated.friend_count = fc;
+      updated.town_extra = extras;
       await ledgerAdd(tx, u.id, 'allowance', amount, `stipend ${base}${report.income ? `, town ${report.income > 0 ? '+' : ''}${report.income}` : ''} · streak ${streak}`);
       return { user: updated, allowance: { amount, streak, base, town_income: report.income } };
     });
@@ -679,7 +728,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
   // Freeze anything that matured since the last pass, then quote only what is still live.
   await maturer.settleMatured(open).catch((e) => console.error('maturer:', e.message));
   const stillLive = open.filter((p) => !p.matured_at);
-  const quotes = await prices.getQuotes(stillLive.map((p) => assets.find(p.symbol)).filter(Boolean));
+  const quotes = await prices.getQuotes(stillLive.map((p) => assets.forPosition(p)).filter(Boolean));
   pricelog.record(quotes).catch((e) => console.warn('pricelog:', e.message));
 
   const positions = open.map((p) => shapePosition(p, quotes[p.symbol]));
@@ -735,7 +784,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
 
   res.json({
     api: API_VERSION,
-    user: { ...publicUser(user), quarter_donated: game.round2(quarterDonated) },
+    user: { ...publicUser(user), quarter_donated: game.round2(quarterDonated), last_seen_at: prevSeen },
     day,
     allowance,
     rules: { tax_rate: cfg.taxRate, ride_tax_factor: cfg.rideTaxFactor, ride_max_steps: cfg.rideMaxSteps, vest_amount: cfg.vestAmount, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
@@ -757,6 +806,78 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     new_followers: await addedYou(user.id, user.followers_seen_at || null),
     token: renewedToken,
   });
+}));
+
+// The welcome-back performance review: how each position's value moved from
+// its buy to its 24-hour mark, for the ones that matured while you were out
+// (`ids`, from your own open positions), plus anything still live over the
+// same stretch. Values are worked out here with the same math as the coin,
+// from the logged prices, so a line ends exactly where the position froze.
+const REVIEW_MAX = 40;
+const REVIEW_POINTS = 90;
+router.get('/positions/review', auth.requireUser, RL.read, wrap(async (req, res) => {
+  const ids = [...new Set(String(req.query.ids || '').split(',').slice(0, REVIEW_MAX).map(intId).filter(Boolean))];
+  if (!ids.length) return res.status(400).json({ error: 'Which positions?' });
+  const { rows: open } = await query(
+    "SELECT * FROM positions WHERE user_id = $1 AND status = 'open' ORDER BY opened_at ASC LIMIT $2", [req.user.id, MAX_OPEN],
+  );
+  await maturer.settleMatured(open).catch((e) => console.error('maturer:', e.message));
+  const done = open.filter((p) => p.matured_at && ids.includes(p.id));
+  if (!done.length) return res.json({ start: null, end: null, positions: [] });
+
+  const ms = (d) => new Date(d).getTime();
+  const end = Math.max(...done.map((p) => ms(p.matures_at)));
+  // Never further back than the price log keeps.
+  const start = Math.max(Math.min(...done.map((p) => ms(p.opened_at))), end - pricelog.KEEP_DAYS * 24 * 3600e3);
+  const live = open.filter((p) => !p.matured_at && ms(p.opened_at) < end);
+  const shown = [...done, ...live].slice(0, REVIEW_MAX);
+
+  const symbols = [...new Set(shown.map((p) => p.symbol))];
+  const { rows: logs } = await query(
+    `SELECT symbol, (extract(epoch FROM at) * 1000)::float8 AS t, price::float8 AS price FROM price_log
+      WHERE symbol IN (SELECT jsonb_array_elements_text($1::jsonb)) AND at BETWEEN $2::timestamptz AND $3::timestamptz
+      ORDER BY symbol, at`,
+    [JSON.stringify(symbols), new Date(start - 60e3).toISOString(), new Date(end).toISOString()],
+  );
+  const bySymbol = new Map();
+  for (const r of logs) {
+    if (!bySymbol.has(r.symbol)) bySymbol.set(r.symbol, []);
+    bySymbol.get(r.symbol).push([Number(r.t), Number(r.price)]);
+  }
+
+  const positions = shown.map((p) => {
+    const t0 = Math.max(ms(p.opened_at), start);
+    const t1 = p.matured_at ? ms(p.matures_at) : end;
+    const ticks = (bySymbol.get(p.symbol) || []).filter(([t]) => t > t0 && t < t1);
+    // Evenly thinned to a drawable number of points.
+    const step = Math.max(1, Math.ceil(ticks.length / REVIEW_POINTS));
+    const kept = ticks.filter((x, i) => i % step === step - 1 || i === ticks.length - 1);
+    const at = (t, price) => [Math.round(t), game.valueOf(p, price, t).value];
+    const startPrice = t0 > ms(p.opened_at) ? ((bySymbol.get(p.symbol) || []).filter(([t]) => t <= t0).pop() || [0, p.entry_price])[1] : p.entry_price;
+    const points = [at(t0, startPrice), ...kept.map(([t, price]) => at(t, price))];
+    let last;
+    if (p.matured_at) {
+      last = [Math.round(t1), Number(p.matured_value)];
+    } else {
+      const prior = ticks.length ? ticks[ticks.length - 1][1] : null;
+      const peeked = prices.peek(p.symbol);
+      last = at(t1, prior != null ? prior : peeked ? peeked.price : p.entry_price);
+    }
+    points.push(last);
+    return {
+      id: p.id,
+      symbol: p.symbol,
+      name: p.name,
+      matured: !!p.matured_at,
+      invested: Number(p.invested),
+      opened_at: p.opened_at,
+      matures_at: p.matures_at,
+      final_value: last[1],
+      points,
+    };
+  });
+
+  res.json({ start, end, positions });
 }));
 
 // More open positions than anyone plays with, few enough that every page
@@ -809,7 +930,7 @@ router.post('/ride', auth.requireUser, RL.trade, wrap(async (req, res) => {
   if (!p.matured_at) return res.status(400).json({ error: "It hasn't matured yet. You can only let a matured position ride." });
   if (!(p.matured_value >= 0.01)) return res.status(400).json({ error: "There's nothing left to ride." });
 
-  const asset = assets.find(p.symbol);
+  const asset = assets.forPosition(p);
   if (!asset) return res.status(400).json({ error: `${p.symbol} is no longer in the game. Collect it instead.` });
   let quote;
   try { quote = await prices.getQuote(asset); } catch (e) {
@@ -830,7 +951,8 @@ router.post('/ride', auth.requireUser, RL.trade, wrap(async (req, res) => {
   // The multiplier keeps climbing: the new day starts where the old one ended.
   const mults = game.rideMultipliers(p, asset.multiplier);
   const hireCost = Town.hireCost(req.user.town || Town.fresh());
-  const lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
+  let lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
+  let featured = null;
   let charity = null;
   if (s.tax > 0) {
     charity = await pickCharity(req.user, charityId);
@@ -845,6 +967,8 @@ router.post('/ride', auth.requireUser, RL.trade, wrap(async (req, res) => {
     // made at the same moment can't leave these lobbyists on the old pick.
     const { rows: [owner] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [p.user_id]);
     if (charity) charity = (await pickCharity(owner, charityId, tx)) || charity;
+    featured = charity && lobbyists > 0 ? await featuredFor(tx, charity.id, day) : null;
+    if (featured) lobbyists = game.round2(lobbyists * featured.multiplier);
     await tx.query(
       `UPDATE positions SET status = 'rolled', closed_at = $1, closed_day = $2, exit_price = $3,
               proceeds = $4, profit = $5, tax = $6, charity_id = $7, tier = $8 WHERE id = $9`,
@@ -875,7 +999,7 @@ router.post('/ride', auth.requireUser, RL.trade, wrap(async (req, res) => {
     ok: true,
     position: shapePosition(result.position, quote),
     user: publicUser(result.user),
-    rolled: { from: p.id, value: p.matured_value, profit: s.profit, tax: s.tax, rate, deferred, lobbyists, hire_cost: hireCost, net: s.net, tier: s.tier, mult_floor: mults.floor, multiplier: mults.ceiling, charity: charity ? { id: charity.id, name: charity.name } : null },
+    rolled: { from: p.id, value: p.matured_value, profit: s.profit, tax: s.tax, rate, deferred, lobbyists, hire_cost: hireCost, net: s.net, tier: s.tier, mult_floor: mults.floor, multiplier: mults.ceiling, charity: charity ? { id: charity.id, name: charity.name } : null, featured },
     quote,
   });
 }));
@@ -911,7 +1035,9 @@ async function claimGift(req, res, key) {
     if (row.claimed_at) return { error: 'Already in your pocket. Mommy and Daddy only pay once.' };
     const amount = game.round2(row.gift != null ? Number(row.gift) : a.gift());
     const s = game.settle({ invested: 0, value: amount });
-    const lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
+    let lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
+    const featured = lobbyists > 0 ? await featuredFor(tx, charity.id, day) : null;
+    if (featured) lobbyists = game.round2(lobbyists * featured.multiplier);
     const { rows: [p] } = await tx.query(
       `INSERT INTO positions (user_id, symbol, name, asset_type, multiplier, mult_floor, invested, entry_price, opened_day, matures_at,
                               matured_at, matured_price, matured_value, origin_invested,
@@ -937,7 +1063,7 @@ async function claimGift(req, res, key) {
         WHERE user_id = $1 AND key = $2`,
       [u.id, key, amount, s.tax, lobbyists, lobbyists > 0 ? charity.id : null, p.id],
     );
-    return { user: u2, position: p, s, amount, lobbyists };
+    return { user: u2, position: p, s, amount, lobbyists, featured };
   });
   if (result.error) return res.status(400).json({ error: result.error });
   const user = result.user;
@@ -949,7 +1075,7 @@ async function claimGift(req, res, key) {
     Town.ensureIssues(user.town, townCtx(user, { day }));
     await query('UPDATE users SET town = $1 WHERE id = $2', [user.town, user.id]);
   }
-  const { s, amount, lobbyists } = result;
+  const { s, amount, lobbyists, featured } = result;
   res.json({
     ok: true,
     user: publicUser(user),
@@ -958,7 +1084,7 @@ async function claimGift(req, res, key) {
     receipt: {
       position_id: result.position.id, symbol: 'GIFT', name: a.title, invested: 0, value: amount,
       real_pct: null, swing_pct: null, busted: false, collected: true, gift: true, achievement: { key, title: a.title, from: a.from }, exit_price: 0,
-      ...s, tier: 'Gift', lobbyists, hire_cost: hireCost,
+      ...s, tier: 'Gift', lobbyists, hire_cost: hireCost, featured,
       charity: lobbyists > 0 ? { id: charity.id, name: charity.name, slug: charity.slug } : null,
     },
   });
@@ -983,7 +1109,7 @@ router.post('/sell', auth.requireUser, RL.trade, wrap(async (req, res) => {
   // frozen price ("collect"). Before maturity: settle at the live price ("sell").
   await maturer.settleMatured([p]).catch((e) => console.error('maturer:', e.message));
   let exitPrice;
-  const asset = assets.find(p.symbol);
+  const asset = assets.forPosition(p);
   if (p.matured_at) {
     exitPrice = p.matured_price;
   } else if (!asset) {
@@ -1016,7 +1142,8 @@ router.post('/sell', auth.requireUser, RL.trade, wrap(async (req, res) => {
   const day = game.dayKey(now);
   // The recruiter's rate depends on how happy your village is.
   const hireCost = Town.hireCost(req.user.town || Town.fresh());
-  const lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
+  let lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
+  let featured = null;
 
   const result = await withTx(async (tx) => {
     const { rows: [locked] } = await tx.query(
@@ -1025,6 +1152,8 @@ router.post('/sell', auth.requireUser, RL.trade, wrap(async (req, res) => {
     if (locked.status !== 'open') return { error: 'Already collected.' };
     const { rows: [owner] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [p.user_id]);
     if (charity) charity = (await pickCharity(owner, charityId, tx)) || charity;
+    featured = charity && lobbyists > 0 ? await featuredFor(tx, charity.id, day) : null;
+    if (featured) lobbyists = game.round2(lobbyists * featured.multiplier);
 
     await tx.query(
       `UPDATE positions SET status = 'closed', closed_at = $1, closed_day = $2, exit_price = $3,
@@ -1065,6 +1194,7 @@ router.post('/sell', auth.requireUser, RL.trade, wrap(async (req, res) => {
       ...s,
       lobbyists,
       hire_cost: hireCost,
+      featured,
       charity: charity ? { id: charity.id, name: charity.name, slug: charity.slug } : null,
     },
   });
@@ -1673,10 +1803,10 @@ router.post('/admin/users/remove', auth.requireUser, requireAdmin, RL.admin, wra
 // --- Public boards ---------------------------------------------------------------
 
 // Where the trickle is going: per-charity shares for the quarter plus all time.
-router.get('/trickle', wrap(async (req, res) => {
+router.get('/trickle', RL.read, wrap(async (req, res) => {
   const day = dayInfo();
   const { rows } = await query(
-    `SELECT c.id, c.slug, c.name, c.blurb, c.url, c.category, c.rating,
+    `SELECT c.id, c.slug, c.name, c.blurb, c.url, c.donate, c.category, c.rating,
             GREATEST(0, COALESCE(q.total, 0))::float8 AS quarter_total,
             COALESCE(a.total, 0)::float8 AS all_time,
             COALESCE(q.donors, 0)::int AS quarter_donors
@@ -1708,8 +1838,12 @@ router.get('/trickle', wrap(async (req, res) => {
     quarter_total: quarterTotal,
     all_time: allTime,
     quarter_donors: players.donors,
-    charities: rows.map((r) => ({
+    // rank: place this quarter (the order above); gap_to_next: lobbyists
+    // behind the charity one place up (0 for the leader).
+    charities: rows.map((r, i) => ({
       ...r,
+      rank: i + 1,
+      gap_to_next: i === 0 ? 0 : game.round2(Math.max(0, rows[i - 1].quarter_total - r.quarter_total)),
       share: quarterTotal > 0 ? r.quarter_total / quarterTotal : 0,
       est_usd: est.get(r.id).usd,
       left_out: est.get(r.id).left_out,
@@ -1918,7 +2052,7 @@ async function playerProfile(viewer, u, day) {
   const { rows: [openCount] } = await query("SELECT COUNT(*)::int AS n FROM positions WHERE user_id = $1 AND status = 'open'", [u.id]);
   await maturer.settleMatured(open).catch(() => {});
   const live = open.filter((p) => !p.matured_at);
-  const quotes = await prices.getQuotes(live.map((p) => assets.find(p.symbol)).filter(Boolean));
+  const quotes = await prices.getQuotes(live.map((p) => assets.forPosition(p)).filter(Boolean));
   const own = !!viewer && viewer.id === u.id;
   // Someone else sees "matures in about 5h", not the minute you bought.
   const positions = open.map((p) => shapePosition(p, quotes[p.symbol])).map((p) => ({
@@ -1961,7 +2095,12 @@ async function playerProfile(viewer, u, day) {
     },
     last_seen: lastSeen(u.last_seen_at),
     town: town ? {
-      happiness: town.happiness, income: town.income, hire_cost: town.hire_cost, motto: town.motto,
+      // "Hide the meters" (card 66): for a week, nobody else sees the numbers.
+      // The lobbyist price is hidden with them; it's happiness, in dollars.
+      ...(!isYou && Town.metersHidden(u.town, day.key)
+        ? { happiness: null, income: null, hire_cost: null, meters_hidden: true }
+        : { happiness: town.happiness, income: town.income, hire_cost: town.hire_cost }),
+      motto: town.motto,
       sides: { preston: u.town.sides.preston || 0, dolores: u.town.sides.dolores || 0 },
       pet: town.cat && town.cat.name ? { name: town.cat.name, pronoun: town.cat.pronoun, coat: town.cat.coat, wearing: town.cat.wearing, owned: town.cat.owned.length, spent: town.cat.spent } : null,
       buildings: town.plots.map((p) => (p.building
@@ -2000,9 +2139,23 @@ router.get('/friends', auth.requireUser, wrap(async (req, res) => {
   const friends = rows.map((u) => ({
     username: u.username, streak: u.streak, total_donated: u.total_donated, quarter_donated: game.round2(Math.max(0, u.quarter_total)),
     badges: game.badgesFor(u.total_donated), cash: u.cash, last_seen: lastSeen(u.last_seen_at),
-    town: u.town && Town.isUnlocked(u.total_donated) ? { happiness: u.town.happiness, motto: Town.view(u.town, townCtx(u, { day: day.key })).motto } : null,
+    town: u.town && Town.isUnlocked(u.total_donated) ? { happiness: Town.metersHidden(u.town, day.key) ? null : u.town.happiness, motto: Town.view(u.town, townCtx(u, { day: day.key })).motto } : null,
   }));
   res.json({ friends, added_you: followers.n, waiting: await addedYou(req.user.id, null, 50), max: MAX_FRIENDS, your_username: req.user.username, is_guest: req.user.is_guest });
+}));
+
+// An invite link (?from=<name>): a brand-new player starts out following
+// whoever sent them. One direction only, the same row "Add friend" makes, so
+// a forged link can't put anyone on the inviter's list or open their wall;
+// the inviter sees "added you" and decides whether to add back.
+router.post('/friends/invite', auth.requireUser, RL.social, wrap(async (req, res) => {
+  const from = String((req.body || {}).from || '');
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(from)) return res.status(400).json({ error: 'Not a player name.' });
+  const inviter = await findPlayer(from);
+  if (!inviter || inviter.id === req.user.id) return res.json({ ok: false });
+  if ((await friendCount(req.user.id)) >= MAX_FRIENDS) return res.json({ ok: false });
+  await query('INSERT INTO friends (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.user.id, inviter.id]);
+  res.json({ ok: true, username: inviter.username });
 }));
 
 router.post('/friends/add', auth.requireUser, RL.social, wrap(async (req, res) => {
@@ -2078,5 +2231,190 @@ router.post('/wall/:id/delete', auth.requireUser, RL.wall, wrap(async (req, res)
   res.json({ ok: true, posts: owner && (await wallAccess(req.user, owner)) ? await wallPosts(owner, req.user) : [] });
 }));
 
+
+// --- Lobbyfest history ------------------------------------------------------------
+//
+// What went out each quarter, to whom, and the receipt. Public: the promises
+// say receipts land here. An admin enters each one after it's paid.
+
+router.get('/lobbyfests', RL.read, wrap(async (req, res) => {
+  const { rows: fests } = await query(
+    `SELECT id, quarter, paid_at::text AS paid_at, pot::float8 AS pot, receipt_url, notes
+       FROM lobbyfests ORDER BY quarter DESC LIMIT 40`,
+  );
+  const ids = fests.map((f) => f.id);
+  const { rows: pays } = ids.length ? await query(
+    `SELECT p.lobbyfest_id, p.charity_id, c.name, c.url, p.lobbyists::float8 AS lobbyists, p.usd::float8 AS usd
+       FROM lobbyfest_payouts p JOIN charities c ON c.id = p.charity_id
+      WHERE p.lobbyfest_id = ANY($1) ORDER BY p.usd DESC, p.lobbyists DESC, c.name`, [ids],
+  ) : { rows: [] };
+  res.json({
+    lobbyfests: fests.map((f) => ({ ...f, payouts: pays.filter((x) => x.lobbyfest_id === f.id).map(({ lobbyfest_id, ...x }) => x) })),
+  });
+}));
+
+const dollars = (v, max) => { const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= max ? game.round2(n) : null; };
+const isDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+
+// Enter (or correct) one quarter's Lobbyfest. Same quarter again replaces it.
+router.post('/admin/lobbyfests', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const b = req.body || {};
+  const quarter = String(b.quarter || '').trim().toUpperCase();
+  if (!/^\d{4}-Q[1-4]$/.test(quarter)) return res.status(400).json({ error: 'The quarter looks like 2026-Q4.' });
+  const paidAt = String(b.paid_at || '').trim();
+  if (paidAt && !isDay(paidAt)) return res.status(400).json({ error: 'Paid on: a date like 2027-01-15.' });
+  const pot = dollars(b.pot, 10_000_000);
+  if (pot == null) return res.status(400).json({ error: 'The pot is a dollar amount.' });
+  const receipt = b.receipt_url ? cleanUrl(b.receipt_url, 500) : '';
+  if (receipt === null) return res.status(400).json({ error: "The receipt link isn't a web address." });
+  const notes = cleanWallBody(b.notes).trim().slice(0, 1000);
+  const rows = Array.isArray(b.payouts) ? b.payouts : [];
+  if (rows.length > 100) return res.status(400).json({ error: 'Too many rows.' });
+  const payouts = new Map();
+  for (const r of rows) {
+    const cid = intId(r && r.charity_id), lob = dollars(r && r.lobbyists, 1e9), usd = dollars(r && r.usd, 10_000_000);
+    if (!cid || lob == null || usd == null) return res.status(400).json({ error: 'Each row needs a charity, lobbyists and dollars (zero or more).' });
+    if (lob > 0 || usd > 0) payouts.set(cid, { cid, lob, usd });
+  }
+  if (payouts.size) {
+    const { rows: found } = await query('SELECT id FROM charities WHERE id = ANY($1)', [[...payouts.keys()]]);
+    if (found.length !== payouts.size) return res.status(400).json({ error: "One of those charities doesn't exist." });
+  }
+  const id = await withTx(async (tx) => {
+    const { rows: [f] } = await tx.query(
+      `INSERT INTO lobbyfests (quarter, paid_at, pot, receipt_url, notes) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (quarter) DO UPDATE SET paid_at = EXCLUDED.paid_at, pot = EXCLUDED.pot, receipt_url = EXCLUDED.receipt_url, notes = EXCLUDED.notes
+       RETURNING id`, [quarter, paidAt || null, pot, receipt || '', notes],
+    );
+    await tx.query('DELETE FROM lobbyfest_payouts WHERE lobbyfest_id = $1', [f.id]);
+    for (const x of payouts.values()) {
+      await tx.query('INSERT INTO lobbyfest_payouts (lobbyfest_id, charity_id, lobbyists, usd) VALUES ($1, $2, $3, $4)', [f.id, x.cid, x.lob, x.usd]);
+    }
+    return f.id;
+  });
+  res.json({ ok: true, id, quarter });
+}));
+
+router.post('/admin/lobbyfests/delete', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const quarter = String((req.body || {}).quarter || '').trim().toUpperCase();
+  if (!/^\d{4}-Q[1-4]$/.test(quarter)) return res.status(400).json({ error: 'Which quarter?' });
+  const { rowCount } = await query('DELETE FROM lobbyfests WHERE quarter = $1', [quarter]);
+  res.json({ ok: true, deleted: rowCount });
+}));
+
+// --- Events (the weekly beat) -----------------------------------------------------
+//
+// featured_charity: lobbyists hired for that charity while it runs count
+// ×multiplier (1.25 unless set), in sell, ride and gift claims. No row, no event.
+
+const EVENT_KINDS = ['featured_charity'];
+
+router.get('/events/current', RL.read, wrap(async (req, res) => {
+  const { rows } = await query(
+    `SELECT e.id, e.kind, e.starts_on::text AS starts_on, e.ends_on::text AS ends_on, e.charity_id, c.name AS charity_name,
+            e.multiplier::float8 AS multiplier, e.title, e.blurb
+       FROM events e LEFT JOIN charities c ON c.id = e.charity_id
+      WHERE e.starts_on <= $1::date AND e.ends_on >= $1::date ORDER BY e.starts_on, e.id LIMIT 5`, [game.dayKey()],
+  );
+  res.json({ events: rows });
+}));
+
+router.get('/admin/events', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const { rows } = await query(
+    `SELECT e.id, e.kind, e.starts_on::text AS starts_on, e.ends_on::text AS ends_on, e.charity_id, c.name AS charity_name,
+            e.multiplier::float8 AS multiplier, e.title, e.blurb
+       FROM events e LEFT JOIN charities c ON c.id = e.charity_id ORDER BY e.starts_on DESC, e.id DESC LIMIT 30`,
+  );
+  res.json({ events: rows, today: game.dayKey() });
+}));
+
+router.post('/admin/events', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const b = req.body || {};
+  const kind = String(b.kind || 'featured_charity');
+  if (!EVENT_KINDS.includes(kind)) return res.status(400).json({ error: 'Unknown kind of event.' });
+  const starts = String(b.starts_on || '').trim(), ends = String(b.ends_on || '').trim();
+  if (!isDay(starts) || !isDay(ends)) return res.status(400).json({ error: 'Start and end are dates like 2026-11-02.' });
+  const span = (Date.parse(`${ends}T00:00:00Z`) - Date.parse(`${starts}T00:00:00Z`)) / 86400e3;
+  if (span < 0) return res.status(400).json({ error: 'It has to end on or after the day it starts.' });
+  if (span > 31) return res.status(400).json({ error: 'A month at most.' });
+  const charityId = intId(b.charity_id);
+  const { rows: [c] } = charityId ? await query('SELECT id, name FROM charities WHERE id = $1 AND active', [charityId]) : { rows: [] };
+  if (!c) return res.status(400).json({ error: 'Pick a charity.' });
+  const mult = b.multiplier == null || b.multiplier === '' ? 1.25 : Number(b.multiplier);
+  if (!(Number.isFinite(mult) && mult > 1 && mult <= 3)) return res.status(400).json({ error: 'The multiplier is more than 1 and at most 3.' });
+  const title = cleanWallBody(b.title).trim().slice(0, 120);
+  const blurb = cleanWallBody(b.blurb).trim().slice(0, 500);
+  const { rows: [e] } = await query(
+    `INSERT INTO events (kind, starts_on, ends_on, charity_id, multiplier, title, blurb) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [kind, starts, ends, c.id, game.round2(mult), title, blurb],
+  );
+  res.json({ ok: true, id: e.id });
+}));
+
+router.post('/admin/events/delete', auth.requireUser, requireAdmin, RL.admin, wrap(async (req, res) => {
+  const id = intId((req.body || {}).id);
+  if (!id) return res.status(400).json({ error: 'Which event?' });
+  const { rowCount } = await query('DELETE FROM events WHERE id = $1', [id]);
+  res.json({ ok: true, deleted: rowCount });
+}));
+
+// --- Daily reminders (web push) ---------------------------------------------------
+//
+// A player turns them on from Account; scripts/notify.js sends at most one a
+// day, at NOTIFY_HOUR in their own time zone, if they haven't played yet.
+// The endpoint is where the server will later send a request, so it must be
+// one of the real push services (never an address of the player's choosing).
+
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)push\.apple\.com$/, /(^|\.)notify\.windows\.com$/];
+function cleanPushSub(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const endpoint = String(raw.endpoint || '');
+  if (endpoint.length > 1000) return null;
+  let u;
+  try { u = new URL(endpoint); } catch (e) { return null; }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port || !PUSH_HOSTS.some((re) => re.test(u.hostname))) return null;
+  const k = raw.keys || {};
+  const b64 = /^[A-Za-z0-9_-]+={0,2}$/;
+  const p256dh = String(k.p256dh || ''), auth = String(k.auth || '');
+  if (!b64.test(p256dh) || p256dh.length > 200 || !b64.test(auth) || auth.length > 100) return null;
+  return { endpoint, keys: { p256dh, auth } };
+}
+function validTz(tz) {
+  if (typeof tz !== 'string' || tz.length > 64 || !/^[A-Za-z]+(?:\/[A-Za-z0-9_+-]+){0,2}$/.test(tz)) return false;
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch (e) { return false; }
+}
+const pushReady = () => !!(cfg.vapidPublic && cfg.vapidPrivate && cfg.vapidSubject);
+
+router.get('/push/key', RL.read, (req, res) => res.json({ key: pushReady() ? cfg.vapidPublic : null, hour: cfg.notifyHour }));
+
+router.post('/push/subscribe', auth.requireUser, RL.social, wrap(async (req, res) => {
+  if (!pushReady()) return res.status(503).json({ error: "Reminders aren't set up on this server yet." });
+  const sub = cleanPushSub((req.body || {}).subscription);
+  if (!sub) return res.status(400).json({ error: "That browser's push address doesn't look right." });
+  const tz = validTz((req.body || {}).tz) ? req.body.tz : cfg.gameTz;
+  await withTx(async (tx) => {
+    await tx.query(
+      `INSERT INTO push_subscriptions (user_id, endpoint, keys, tz) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, keys = EXCLUDED.keys, tz = EXCLUDED.tz, last_sent_day = NULL`,
+      [req.user.id, sub.endpoint, JSON.stringify(sub.keys), tz],
+    );
+    // Five devices a player, newest kept.
+    await tx.query(
+      `DELETE FROM push_subscriptions WHERE user_id = $1 AND id NOT IN
+         (SELECT id FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 5)`, [req.user.id],
+    );
+  });
+  res.json({ ok: true, tz, hour: cfg.notifyHour });
+}));
+
+router.post('/push/unsubscribe', auth.requireUser, RL.social, wrap(async (req, res) => {
+  const endpoint = String((req.body || {}).endpoint || '').slice(0, 1000);
+  if (endpoint) await query('DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2', [req.user.id, endpoint]);
+  else await query('DELETE FROM push_subscriptions WHERE user_id = $1', [req.user.id]);
+  res.json({ ok: true });
+}));
+
+// For scripts/tests: the pieces of townCtx that need the clock or the database.
+router.townHelpers = { calendarCtx, townExtras, featuredFor };
 
 module.exports = router;

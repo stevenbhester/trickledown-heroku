@@ -910,6 +910,137 @@ number box (decimals, clamped to what's waiting; junk ignored until blur),
 − / + step by a chosen size (0.1, 1, 5, 10), a payroll bar shows the split
 live, and Reset puts it back. The server already accepted fractions.
 
+## Welcome-back performance review, the price sampler, 18+
+
+**The review** (front end `js/review.js` + `renderReview` in `js/app.js`; GET
+/positions/review). On a return (a fresh page, a new day, or the tab away ten
+minutes or more) with positions that matured unseen, a sheet replays the
+stretch: one line per position on a shared clock, from the earliest buy to the
+latest maturity, swept over about five seconds; each line's ticker and value
+ride at its head; matured lines stop at their 24-hour mark, live ones run to
+the end. Then the per-position results, a one-line verdict, and "also while
+you were out": the allowance, how many cards are on today's agenda (and which
+are new), gifts waiting, wall posts. Everything else in the welcome (the coin
+toss, achievement peeks, the charity chooser, toasts) waits until it closes.
+Each position is reviewed once per browser (localStorage). Eight colours in a
+fixed, colour-blind-checked order (matured first); past eight, the rest are
+thin grey lines that still get their own row. Drag across the chart afterwards
+to read any moment. Reduced motion shows the end state.
+
+**The sampler** (`src/sampler.js`). The price log only had what /me and the
+maturer happened to fetch, so overnight a held stock could go hours without a
+row. Now held symbols are logged every ~10 minutes (2-minute passes while the
+dyno is awake, plus the 10-minute scheduler job), stalest first, a few stocks
+per pass, always leaving 25 Finnhub calls a minute for players.
+
+**Bug fixed: positions frozen at their purchase price.** `scripts/mature.js`
+(the scheduler job) never loaded the full symbol list, so it only knew the
+curated few; any other stock that matured while the dyno slept looked
+"delisted" and froze at the price it was bought at (value = what went in).
+The web dyno had the same race for a few seconds after every boot. Now the job
+loads the list from the database first, and `assets.forPosition` quotes a
+position by its own symbol until the list has loaded, so "not listed" only
+means "delisted" once the list is actually there. For positions already
+frozen this way and not yet collected, `scripts/refreeze.js` re-freezes each at
+the price logged nearest its mark (dry run by default, `--apply` to write;
+flagged "froze late"). Collected ones have paid out and are left alone.
+
+**18+.** The landing page, the training's last slide, the sign-up / sign-in /
+"keep this account" sheet and the account sheet say the game is for players 18
+and older (creating an account or playing as a guest confirms it), and the FAQ
+has "Who can play?".
+
+## Batch 1 fixes (build 20261030b, API 13)
+
+From the product review's build prompt, Batch 1:
+
+- **1.1** The signed-out training no longer says "In this demo, the money is
+  not": the explainer defaults to `demo: false`, and the landing page passes
+  `{ demo: API.demo }`, so only `?demo` says it.
+- **1.2** The masthead shows your account's day (`user.account_day`), not the
+  site's; the demo says Day 11.
+- **1.3** An empty coin reads "$100K on the coin", not "in play".
+- **1.4** "Unlock: buy the actual pool" (was "the the").
+- **1.5** Card `merger`: Dolores's button is "Spend it here instead".
+- **1.6** Card `streak_month`: "The tallest thing in town becomes The You."
+- **1.7** The crowd line drops the player count under 25.
+- **1.8** The ride box is a label and three short lines (same numbers); on a
+  phone the button sits under them.
+- **1.9** The hire ceremony: "9.71 lobbyists hired. The 0.71 is an intern."
+- **1.10** New ledes on Leaders and Friends.
+- **1.11** FAQ fine print: "Trickle Down is for players 18 and up. None of
+  the money you play with is real, which is also why nothing here is
+  financial advice." (18, not the prompt's 16, per the owner; "none of the
+  money you play with" rather than "nothing here", since the charity money is.)
+- **1.12** Card 66, "Your friends are watching", now does something.
+  Preston's side sets `meters_hidden`, Dolores's `meters_posted` (each cancels
+  the other). Both wear off after 7 days (`TIMED_FLAGS` in town.js, dated in
+  `t.last.<flag>`, cleared in `Town.tick`). While hidden, every other viewer of
+  the profile (and the friends list) gets null happiness, profit and
+  lobbyist price, shown as "Hidden by management". The lobbyist price is
+  hidden too because it's happiness in dollars. The check also reads the
+  date, so the meters come back on time even if the owner never logs in.
+
+## Batches 2–4 (build 20261030c, API 14)
+
+**Batch 2: sharing and invites.** Profiles are public signed out (`#u/<name>`),
+with a bar at the bottom: "This is {name}'s town. Get your own." Invite links
+(`?from=<name>`, in the address or after the `#`) make a brand-new player
+(guest or registered, never a sign-in) start out following the inviter. *One
+direction only*, where the build prompt said both: a both-ways row would let
+anyone forge `?from=you` and land on your list with your wall open to them.
+One direction is exactly what "Add friend" does, and the inviter gets the
+usual "added you, add back?". The share text is "Hired N lobbyists for X" (or
+"Lobbying for X") and "Come lobby with me: <link to your profile>" (guests get
+the plain site link); the charity's standing was left out of it on purpose.
+"Your team: X, 4th of 18, 7 lobbyists behind Y" with a Recruit button sits on
+Lobbyfest and in the Payroll box (`/trickle` now has `rank` and
+`gap_to_next`, and a read rate limit). Empty Friends pages and a friends board
+under 2 people invite. Every charity has a `donate` link ("Give directly ↗",
+placeholders until checked).
+
+**Batch 3.** *Install:* a web manifest (icons 180/192/512, standalone,
+`manifest-src` and `worker-src` in the CSP) and, from day 3, a dismissible
+"Put it on your home screen" card under the coin. *While you were out:* one
+list of overnight news (a broken streak's "Welcome back. Preston kept the
+lights on…", the allowance, positions that matured since the last visit, the
+town's income, cards that expired, yesterday's hires, wall posts, new
+followers, today's cards, gifts). When positions matured unseen, it closes the
+welcome-back performance review (which already replays them, so it skips
+their lines); otherwise it's its own sheet, the digest, shown instead of the
+allowance toast and only when there's news beyond the allowance. Either way
+the rest of the welcome waits for it. `/me` returns `user.last_seen_at` (the
+visit before this one) and `town.expired_yesterday` (counted in
+`Town.tick`). *Rest in peace:* burying a position shows three bowed
+lobbyists and a headstone with the ticker. *Past Lobbyfests:* `lobbyfests` and
+`lobbyfest_payouts` tables, public `GET /lobbyfests`, an admin tab to enter
+each quarter (it can fill from the current standings), and a public
+`#history` page ("Past Lobbyfests →" on Lobbyfest).
+
+**Batch 4.** *Landing at phone width:* the headline, both faces of the coin,
+"Play as a guest · no account", "Create an account", "60-second training
+first", the 18+ line, the pitch, and "$X to charity on <date> · N players
+lobbying" (N from 25 up). Desktop is unchanged. *Cards that buy upgrades:*
+`amenity_fee` (Dolores) buys the actual pool and `clinic_bill` (Preston) the
+billing department, at the upgrade's price, owned exactly as the Site Office
+would, and neither card is dealt once its upgrade is owned (`not_upgrade`).
+*New unlock types:* `tier_yesterday`, `same_ticker_days`, `charity`,
+`days_to_lobbyfest_max`, `weekday`, `month`, with deck text ("Happens on
+Fridays"), `{Charity}` in card text, and the server supplying the context
+(`calendarCtx`, `townExtras`). Six `draft_*` cards exercise them; drafts are
+never dealt or shown unless an admin forces them open. *Daily reminders:* a
+`push_subscriptions` table, `/push/key`, `/push/subscribe` (the endpoint must
+be a real push service, so the server can't be pointed at an arbitrary
+address), `/push/unsubscribe`, an hourly `scripts/notify.js` (once a day,
+NOTIFY_HOUR in each device's time zone, only if the player hasn't played that
+day; dead subscriptions removed), `sw.js` (push and click only, no caching),
+and a "Daily reminder" switch in Account that asks permission only when
+tapped (on iPhone outside the home screen it points at installing). The
+`web-push` package is a new dependency. *Featured charity:* an `events` table,
+`GET /events/current`, an admin Events tab; while one runs, lobbyists hired for
+that charity on a sell, ride or gift count ×1.25 (receipts carry `featured`),
+and Today and Lobbyfest show a banner.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

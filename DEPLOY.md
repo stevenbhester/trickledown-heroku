@@ -100,6 +100,24 @@ stable Google `sub`, never on the email address. Linking Google to an existing
 account only happens while signed in to that account; nothing is ever matched
 up by email.
 
+## 3b. Daily reminders (optional)
+
+Players who put the game on their home screen can turn on one reminder a
+day, at 5pm their time, only on days they haven't played yet. It needs a key
+pair and an hourly job:
+
+```
+npx web-push generate-vapid-keys                 # once, on your own machine
+heroku config:set VAPID_PUBLIC="…" VAPID_PRIVATE="…" VAPID_SUBJECT="mailto:you@example.com"
+heroku config:set NOTIFY_HOUR=17                 # optional; the local hour it goes out (default 17)
+heroku addons:open scheduler                     # add a job: node scripts/notify.js, every hour
+```
+
+Without the three VAPID vars the Account sheet doesn't offer reminders and the
+job does nothing. Keep VAPID_PRIVATE secret; changing the pair turns off every
+reminder that's already on (players turn it back on from Account). On iPhone
+and iPad, reminders only work from the home screen (iOS 16.4 or later).
+
 ## 4. The charities
 
 They're real: 18 organizations in `src/charities.js`, each rated 4 of 4 stars
@@ -116,11 +134,25 @@ If you set `DEMO_MODE=true` earlier (the old instructions said to), unset it
 now: `heroku config:unset DEMO_MODE`. With it on, the site adds "demo, the
 money is pretend" notes. See the README's "Before real money moves" list.
 
+## Once, after deploying build 20261030a or later
+
+That build fixes a bug where the scheduler job froze some matured positions
+at their purchase price. To repair any that haven't been collected yet:
+
+```
+heroku run node scripts/refreeze.js           # dry run: lists what it would change
+heroku run node scripts/refreeze.js --apply   # writes it
+```
+
+Zero found is the likely answer. It only touches open positions frozen at
+exactly their cost in a symbol that's still listed, and only when the price
+log has a price near the 24-hour mark (kept 7 days, so run it this week).
+
 ## Did the deploy take?
 
 The page and the server ship separately, so it's easy to update one and not
 the other. Open `https://<your-app>.herokuapp.com/health` in a browser. It
-should say `"api":11` (the number in `API_VERSION` in `src/routes.js`). No
+should say `"api":14` (the number in `API_VERSION` in `src/routes.js`). No
 `api`, or a lower number, means the server is older than the page: upload
 the whole backend again (every file in `src/`, including any new ones) and let
 Heroku redeploy. Signed in as an admin, the page also says so in a yellow bar

@@ -131,9 +131,9 @@
     { id: 'mold', needs: { building: 'tenement' }, title: 'The mold report', setup: 'The inspector used the word "sentient."', ask: 'What do you do about the mold?',
       preston: { label: 'Paint over it', line: 'A fresh coat of Eggshell Optimism. Mold is just texture.', fx: { income: 2, happy: -10 } },
       dolores: { label: 'Fix the walls', line: "It's the walls, not the paint. It's always the walls.", fx: { cash: -30, happy: 15 } } },
-    { id: 'amenity_fee', needs: { building: 'pinnacle' }, title: 'The amenities', setup: 'Residents of The Pinnacle are asking where the pool is.', ask: 'What do you tell them about the pool?',
+    { id: 'amenity_fee', needs: { building: 'pinnacle', not_upgrade: 'pool' }, title: 'The amenities', setup: 'Residents of The Pinnacle are asking where the pool is.', ask: 'What do you tell them about the pool?',
       preston: { label: 'Add an amenity fee', line: 'The fee funds the amenities. The amenities are the fee.', fx: { income: 5, happy: -7 } },
-      dolores: { label: 'Build the pool', line: 'You advertised a pool. Build a pool. Even a small pool. Even a big tub.', fx: { cash: -30, happy: 12 } } },
+      dolores: { label: 'Build the pool', line: 'You advertised a pool. Build a pool. Even a small pool. Even a big tub.', fx: { cash: -40, happy: 4, income: -1 }, buys: 'pool' } },
     { id: 'coop_meeting', needs: { building: 'coop' }, title: 'The co-op meeting', setup: 'Hour four. They are discussing the meeting schedule.', ask: 'How do you handle the meeting?',
       preston: { label: 'Let Preston chair it', line: "I'll streamline. First item: I'm the board now.", fx: { income: 4, happy: -8 } },
       dolores: { label: 'Let it run long', line: 'This is what democracy looks like. It looks long.', fx: { happy: 4 } } },
@@ -143,8 +143,8 @@
     { id: 'scrip', needs: { building: 'store' }, title: 'Payday', setup: 'The Company Store would like to handle payroll.', ask: 'How do you pay them this month?',
       preston: { label: 'Pay them in scrip', line: 'Store credit. Spendable at one (1) store. Ours.', fx: { income: 6, happy: -9 } },
       dolores: { label: 'Price-match outside', line: 'Match the prices at the store across the river. If they can, you can.', fx: { income: -3, happy: 6 } } },
-    { id: 'clinic_bill', needs: { building: 'clinic' }, title: 'The clinic budget', setup: 'The Free Clinic has a line out the door. Preston has a spreadsheet.', ask: 'How do you shorten the line?',
-      preston: { label: 'Add a billing department', line: 'Free is a price point. We could explore other price points.', fx: { income: 6, happy: -10 } },
+    { id: 'clinic_bill', needs: { building: 'clinic', not_upgrade: 'billing' }, title: 'The clinic budget', setup: 'The Free Clinic has a line out the door. Preston has a spreadsheet.', ask: 'How do you shorten the line?',
+      preston: { label: 'Add a billing department', line: 'Free is a price point. We could explore other price points.', fx: { cash: -25, income: 7, happy: -3 }, buys: 'billing' },
       dolores: { label: 'Hire another nurse', line: "One more nurse and the line's gone. A line costs you more than a nurse.", fx: { cash: -20, happy: 8 } } },
 
     { id: 'reporter', needs: { lobbyists: 5 }, title: 'A reporter', setup: 'She has questions about the village. She has a notebook. She has already seen the parking lot.', ask: 'What do you tell the reporter?',
@@ -158,7 +158,7 @@
       dolores: { label: 'Bonus them', line: 'Split it. Evenly. Yes, including the ones in the ball pit.', fx: { cash: -30, happy: 12 } } },
     { id: 'merger', needs: { cash: 120 }, title: 'A merger offer', setup: 'The town across the river is for sale. They have a lake. The lake is, allegedly, mostly water.', ask: 'Do you buy the town?',
       preston: { label: 'Buy the town', line: 'Synergies. Economies of scale. Also, a lake.', fx: { cash: -100, income: 12, happy: -4 } },
-      dolores: { label: 'Pay down the clinic', line: "Pass. Put it toward the people who already live here. They're closer.", fx: { cash: -40, happy: 10 } } },
+      dolores: { label: 'Spend it here instead', line: "Pass. Put it toward the people who already live here. They're closer.", fx: { cash: -40, happy: 10 } } },
     // Small, cheap, and they come back around. A side with `sets` leaves a mark
     // on the town; later cards need that mark to appear.
     { id: 'lobby_art', title: 'The lobby art', setup: 'The lobby wall is blank. Several lobbyists have noticed. One has a ladder.', ask: 'What goes on the wall?',
@@ -248,7 +248,7 @@
       preston: { label: 'Mandatory applause', line: 'Announce it. Applause, two minutes, logged.', fx: { cash: 10, happy: -3 } },
       dolores: { label: 'Afternoon off, for everyone', line: 'You showed up seven days. So did they. Give them the afternoon.', fx: { cash: -5, happy: 9 } } },
     { id: 'streak_month', needs: { streak: 30 }, title: 'A month straight', setup: 'Thirty days. There is talk of naming something after you. The talk is coming from you.', ask: 'What gets named?',
-      preston: { label: 'Name a building after you', line: 'The Pinnacle becomes The You. Rent goes up, because it is The You now.', fx: { income: 3, happy: -5 } },
+      preston: { label: 'Name a building after you', line: 'The tallest thing in town becomes The You. Rent goes up, because it is The You now.', fx: { income: 3, happy: -5 } },
       dolores: { label: 'Name it after them', line: 'Name it after the lobbyists. All of them. The sign will be long. The sign will be loved.', fx: { happy: 12 } } },
     { id: 'audit', needs: { cash: 200 }, title: 'An audit', setup: 'An auditor has arrived. She is very calm. She has a pencil. She has already found the ball pit.', ask: 'How do you handle the auditor?',
       preston: { label: 'Creative accounting', line: 'The ball pit is a research facility. The casino is a wellness center. I have receipts, in the sense that I have printed them.', fx: { cash: 25, happy: -2 }, sets: 'cooked_books' },
@@ -309,8 +309,8 @@
       preston: { label: 'Cut the clinic hours', line: 'Nobody is using it. Half the hours, same sign.', fx: { income: 3, happy: -4 } },
       dolores: { label: 'Keep it open', line: 'It is empty because it is open. That is the whole idea. It is working. Leave it.', fx: { happy: 3 } } },
     { id: 'followers', needs: { friends: 5 }, title: 'Your friends are watching', setup: 'Five of your friends can see this village. One of them has been refreshing. You can tell.', ask: 'Do your friends see the numbers?',
-      preston: { label: 'Hide the meters', line: 'A village is only as unhappy as the public can prove.', fx: { income: 1, happy: -2 } },
-      dolores: { label: 'Post the numbers in the lobby', line: 'Happiness and profit, on a board, every morning. If you are embarrassed by the numbers, change the numbers.', fx: { happy: 3 } } },
+      preston: { label: 'Hide the meters', line: 'A village is only as unhappy as the public can prove.', fx: { income: 1, happy: -2 }, sets: 'meters_hidden' },
+      dolores: { label: 'Post the numbers in the lobby', line: 'Happiness and profit, on a board, every morning. If you are embarrassed by the numbers, change the numbers.', fx: { happy: 3 }, sets: 'meters_posted' } },
     { id: 'pool_party', needs: { upgrade: 'pool' }, title: 'Pool party', setup: 'The pool is small. The party is not.', ask: 'Who gets in the pool?',
       preston: { label: 'Sell tickets', line: 'A velvet rope, but wet. Admission, towels extra.', fx: { cash: 12, happy: -2 } },
       dolores: { label: 'Open swim', line: 'Everybody in. {Cat} is a lifeguard. {He} did not apply; {he} was simply there.', fx: { happy: 8 } } },
@@ -345,6 +345,20 @@
     { id: 'dental_day', needs: { upgrade: 'dental' }, title: 'Free dental day', setup: 'The dental wing is offering a free day. The line is around the block. Everyone is smiling, carefully.', ask: 'What does free dental day include?',
       preston: { label: 'Charge for the fluoride', line: 'The exam is free. The fluoride is an upgrade. The toothbrush is a souvenir, and souvenirs are not free.', fx: { cash: 6, happy: -1 } },
       dolores: { label: 'Floss for everyone', line: 'Floss. Toothbrushes. A pamphlet that is actually read. Teeth, finally, in the budget.', fx: { happy: 6 } } },
+    // Drafts: one per newer unlock type, so the mechanism can be tested. Never
+    // dealt or shown in the deck (draft: true) unless an admin forces them open.
+    { id: 'draft_rip', draft: true, needs: { tier_yesterday: 'Rest in peace' }, title: 'DRAFT', setup: 'DRAFT: a position went to zero yesterday.', ask: 'DRAFT?',
+      preston: { label: 'DRAFT Preston', line: 'DRAFT.', fx: { income: 1 } }, dolores: { label: 'DRAFT Dolores', line: 'DRAFT.', fx: { happy: 1 } } },
+    { id: 'draft_same_ticker', draft: true, needs: { same_ticker_days: 5 }, title: 'DRAFT', setup: 'DRAFT: five days running on the same stock.', ask: 'DRAFT?',
+      preston: { label: 'DRAFT Preston', line: 'DRAFT.', fx: { income: 1 } }, dolores: { label: 'DRAFT Dolores', line: 'DRAFT.', fx: { happy: 1 } } },
+    { id: 'draft_charity', draft: true, needs: { charity: true }, title: 'DRAFT', setup: 'DRAFT: {Charity} sent a thank-you note.', ask: 'DRAFT?',
+      preston: { label: 'DRAFT Preston', line: 'DRAFT.', fx: { income: 1 } }, dolores: { label: 'DRAFT Dolores', line: 'DRAFT: write back to {Charity}.', fx: { happy: 1 } } },
+    { id: 'draft_lobbyfest_week', draft: true, needs: { days_to_lobbyfest_max: 7 }, title: 'DRAFT', setup: 'DRAFT: Lobbyfest is this week.', ask: 'DRAFT?',
+      preston: { label: 'DRAFT Preston', line: 'DRAFT.', fx: { income: 1 } }, dolores: { label: 'DRAFT Dolores', line: 'DRAFT.', fx: { happy: 1 } } },
+    { id: 'draft_friday', draft: true, needs: { weekday: 5 }, title: 'DRAFT', setup: 'DRAFT: it is Friday.', ask: 'DRAFT?',
+      preston: { label: 'DRAFT Preston', line: 'DRAFT.', fx: { income: 1 } }, dolores: { label: 'DRAFT Dolores', line: 'DRAFT.', fx: { happy: 1 } } },
+    { id: 'draft_december', draft: true, needs: { month: 12 }, title: 'DRAFT', setup: 'DRAFT: it is December.', ask: 'DRAFT?',
+      preston: { label: 'DRAFT Preston', line: 'DRAFT.', fx: { income: 1 } }, dolores: { label: 'DRAFT Dolores', line: 'DRAFT.', fx: { happy: 1 } } },
   ];
   const BY_ID = new Map(ISSUES.map((i) => [i.id, i]));
 
@@ -373,12 +387,12 @@
 
   // Card text names the cat: {Cat}/{cat} is the name (or "The cat"/"the
   // cat" before there is one), and {He} {he} {him} {his} follow the pronoun.
-  function catWords(cat, text) {
+  function catWords(cat, text, charity = null) {
     if (!text || text.indexOf('{') < 0) return text;
     const name = cat && cat.name;
     const she = !cat || cat.pronoun !== 'he';
-    const w = { Cat: name || 'The cat', cat: name || 'the cat', He: she ? 'She' : 'He', he: she ? 'she' : 'he', him: she ? 'her' : 'him', his: she ? 'her' : 'his' };
-    return text.replace(/\{(Cat|cat|He|he|him|his)\}/g, (_, k) => w[k]);
+    const w = { Cat: name || 'The cat', cat: name || 'the cat', He: she ? 'She' : 'He', he: she ? 'she' : 'he', him: she ? 'her' : 'him', his: she ? 'her' : 'his', Charity: charity || 'your charity' };
+    return text.replace(/\{(Cat|cat|He|he|him|his|Charity)\}/g, (_, k) => w[k]);
   }
 
   // A cat's name: letters, numbers, spaces and . ' - only; 1 to 20 of them.
@@ -470,6 +484,16 @@
     return t;
   }
   const dayDiff = (a, b) => (a && b ? Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000) : 0);
+  // Marks that wear off: how many days each lasts, counted from the day it
+  // was set (kept in t.last under the mark's own name). Hiding the meters
+  // and posting them cancel each other.
+  const TIMED_FLAGS = { meters_hidden: 7, meters_posted: 7 };
+  const FLAG_CANCELS = { meters_hidden: 'meters_posted', meters_posted: 'meters_hidden' };
+  // Whether other players see this town's happiness and profit. Checks the
+  // date too, so the meters come back on time even if the owner hasn't
+  // logged in to tick the town over.
+  const metersHidden = (t, day) => !!(t && Array.isArray(t.flags) && t.flags.includes('meters_hidden') && t.last && t.last.meters_hidden
+    && (!day || dayDiff(t.last.meters_hidden, day) < TIMED_FLAGS.meters_hidden));
   // Which card leaves which mark, for the deck's "it depends on how you handled…" text.
   const FLAG_SOURCE = {};
   for (const i of ISSUES) for (const k of ['preston', 'dolores']) if (i[k].sets) FLAG_SOURCE[i[k].sets] = i.title;
@@ -530,6 +554,14 @@
     if (needs.streak != null && !((ctx.streak || 0) >= needs.streak)) return false;
     if (needs.happiness_below != null && !(t.happiness < needs.happiness_below)) return false;
     if (needs.happiness_above != null && !(t.happiness > needs.happiness_above)) return false;
+    if (needs.not_upgrade && hasUpgrade(t, needs.not_upgrade)) return false;
+    // The newer ones read the day and the player's record, which the server passes in ctx.
+    if (needs.tier_yesterday && !(Array.isArray(ctx.tiers_yesterday) && ctx.tiers_yesterday.includes(needs.tier_yesterday))) return false;
+    if (needs.same_ticker_days != null && !((ctx.same_ticker_days || 0) >= needs.same_ticker_days)) return false;
+    if (needs.charity && !(ctx.charity_name || ctx.has_charity)) return false;
+    if (needs.days_to_lobbyfest_max != null && !(ctx.days_to_lobbyfest != null && ctx.days_to_lobbyfest <= needs.days_to_lobbyfest_max)) return false;
+    if (needs.weekday != null && ctx.weekday !== needs.weekday) return false;
+    if (needs.month != null && ctx.month !== needs.month) return false;
     return true;
   }
 
@@ -550,13 +582,25 @@
     if (needs.friends != null) parts.push(`have ${needs.friends} friend${needs.friends === 1 ? '' : 's'}${ctx && ctx.friends != null ? have(ctx.friends) : ''}`);
     if (needs.streak != null) parts.push(`a ${needs.streak}-day streak${ctx && ctx.streak != null ? have(`${ctx.streak} day${ctx.streak === 1 ? '' : 's'}`) : ''}`);
     if (needs.building) { for (const slot of Object.keys(PLOTS)) { const b = PLOTS[slot].options[needs.building]; if (b) parts.push(`build ${b.name}`); } }
-    if (needs.upgrade) { const u = ALL_UPGRADES[needs.upgrade]; if (u) parts.push(`buy the ${u.name.replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase())}`); }
+    if (needs.upgrade) { const u = ALL_UPGRADES[needs.upgrade]; if (u) parts.push(`buy the ${u.name.replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase()).replace(/^the /, '')}`); }
     if (needs.flag) return `Follows one of the two choices on “${FLAG_SOURCE[needs.flag] || 'an earlier card'}.” Play that card and see.`;
     if (needs.happiness_below != null) parts.push(`happiness drops under ${needs.happiness_below}`);
     if (needs.happiness_above != null) parts.push(`happiness is over ${needs.happiness_above}`);
+    if (needs.same_ticker_days != null) parts.push(`buy the same stock ${needs.same_ticker_days} days running${ctx && ctx.same_ticker_days != null ? have(ctx.same_ticker_days) : ''}`);
+    if (needs.charity) parts.push('choose a charity');
+    // When it happens, rather than what unlocks it.
+    const when = [];
+    if (needs.tier_yesterday) when.push(needs.tier_yesterday === 'Rest in peace' ? 'the day after a position goes to zero' : `the day after a “${needs.tier_yesterday}” trade`);
+    if (needs.days_to_lobbyfest_max != null) when.push(needs.days_to_lobbyfest_max === 7 ? 'in the last week before Lobbyfest' : `in the last ${needs.days_to_lobbyfest_max} days before Lobbyfest`);
+    if (needs.weekday != null) when.push(`on ${WEEKDAYS[needs.weekday]}s`);
+    if (needs.month != null) when.push(`in ${MONTHS[needs.month - 1]}`);
+    const gone = needs.not_upgrade && ALL_UPGRADES[needs.not_upgrade] ? ` Not once you've bought ${ALL_UPGRADES[needs.not_upgrade].name.replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase())}.` : '';
+    if (when.length) return `${parts.length ? `Unlock: ${parts.join(' and ')}. ` : ''}Happens ${when.join(' and ')}.${gone}`;
     const emergent = ['happiness_below', 'happiness_above'].some((k) => needs[k] != null);
-    return (emergent ? 'Happens when ' : 'Unlock: ') + parts.join(' and ') + '.';
+    return (emergent ? 'Happens when ' : 'Unlock: ') + parts.join(' and ') + '.' + gone;
   }
+  const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   const RECUR_DAYS = 7;
   // Money shows to one decimal of $1K, so $29.97K reads as "$30K". Anything
@@ -575,8 +619,9 @@
   // emergent ones (a strike, the flu) can come back a week later; a
   // follow-up you've answered never knocks twice.
   const MAX_TOWN_CARDS = 6;
-  const EMERGENT = ['happiness_below', 'happiness_above'];
-  const unlockedCards = (t, ctx) => ISSUES.filter((i) => i.needs && (needsMet(i.needs, t, ctx) || adminOpen(t, i.id)));
+  const EMERGENT = ['happiness_below', 'happiness_above', 'tier_yesterday', 'days_to_lobbyfest_max', 'weekday', 'month'];
+  // Drafts are never dealt unless an admin forces them open.
+  const unlockedCards = (t, ctx) => ISSUES.filter((i) => i.needs && (adminOpen(t, i.id) || (!i.draft && needsMet(i.needs, t, ctx))));
   function pickIssues(t, ctx) {
     const played = new Set(t.played || []);
     const general = ISSUES.filter((i) => !i.needs);
@@ -637,6 +682,9 @@
     migrate(t);
     const { day, unlocked = true } = ctx;
     if (t.day === day) return { ticked: false, report: t.report };
+    for (const [f, days] of Object.entries(TIMED_FLAGS)) {
+      if (t.flags.includes(f) && (!t.last[f] || dayDiff(t.last[f], day) >= days)) { t.flags = t.flags.filter((x) => x !== f); delete t.last[f]; }
+    }
     const firstDay = t.day === null;
     const before = { happiness: t.happiness };
     // Unplayed cards cost morale, but only ones that had a free side (a card
@@ -645,6 +693,8 @@
     const freeSide = (id) => { const c = BY_ID.get(id); return !!c && ((c.preston.fx.cash || 0) >= 0 || (c.dolores.fx.cash || 0) >= 0); };
     const built = !!(t.plots.housing || t.plots.square);
     const ignored = unlocked && built ? (t.issues || []).filter((i) => !i.chosen && freeSide(i.id)).length : 0;
+    // Every card left unplayed yesterday, for the morning digest.
+    const expired = firstDay ? 0 : (t.issues || []).filter((i) => !i.chosen).length;
     if (!firstDay) {
       // Buildings push every day; left alone, happiness drifts back toward 55
       // (10% of the way, at least a point), so a town settles at whatever its
@@ -663,6 +713,7 @@
       income: income(t),
       happy_delta: t.happiness - before.happiness,
       ignored,
+      expired,
     };
     t.day = day;
     return { ticked: true, report: t.report };
@@ -758,11 +809,24 @@
     if (!slot) return { error: "That card isn't on today's agenda." };
     if (slot.chosen) return { error: 'Already decided.' };
     if (side !== 'preston' && side !== 'dolores') return { error: 'Pick Preston or Dolores.' };
-    const fx = BY_ID.get(issueId)[side].fx;
-    const cash = cardCost(t, fx);
-    if (cash < 0 && !canPay(cashAvailable, -cash)) return { error: `That costs $${-cash}K and you have ${kStr(cashAvailable)} on the coin.` };
-    const paid = cash < 0 ? charge(cashAvailable, -cash) : cash;
-    applyFx(t, fx);
+    const card = BY_ID.get(issueId)[side];
+    let fx = card.fx, paid;
+    if (card.buys) {
+      // This side buys a building's upgrade: the upgrade's price, owned exactly
+      // as the Site Office would, and its own daily effects from then on.
+      const u = ALL_UPGRADES[card.buys];
+      if (!u || t.plots[u.slot] !== u.building) return { error: 'Build it first. There is nothing to put it on.' };
+      if (hasUpgrade(t, card.buys)) return { error: `You already have ${u.name.replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase())}.` };
+      if (!canPay(cashAvailable, u.cost)) return { error: `That costs $${u.cost}K and you have ${kStr(cashAvailable)} on the coin.` };
+      paid = charge(cashAvailable, u.cost);
+      t.upgrades[u.slot].push(card.buys);
+      fx = { cash: -u.cost, income: u.income || 0, happy: u.happy || 0 };
+    } else {
+      const cash = cardCost(t, fx);
+      if (cash < 0 && !canPay(cashAvailable, -cash)) return { error: `That costs $${-cash}K and you have ${kStr(cashAvailable)} on the coin.` };
+      paid = cash < 0 ? charge(cashAvailable, -cash) : cash;
+      applyFx(t, fx);
+    }
     slot.chosen = side;
     t.sides[side] = (t.sides[side] || 0) + 1;
     t.choices[issueId] = { side, day: t.day };
@@ -770,7 +834,9 @@
     if (!t.played.includes(issueId)) t.played.push(issueId);
     t.last[issueId] = t.day;
     const sets = BY_ID.get(issueId)[side].sets || null;
+    if (sets && FLAG_CANCELS[sets]) { t.flags = t.flags.filter((x) => x !== FLAG_CANCELS[sets]); delete t.last[FLAG_CANCELS[sets]]; }
     if (sets && !t.flags.includes(sets)) t.flags.push(sets);
+    if (sets && TIMED_FLAGS[sets]) t.last[sets] = t.day;
     return { cash: paid, fx: { ...fx }, side, noted: !!sets && FOLLOWED.has(sets) };
   }
 
@@ -841,8 +907,10 @@
   // What the client needs to draw the village and the panel.
   function view(t, ctx = {}) {
     migrate(t);
-    const say = (text) => catWords(t.cat, text);
-    const sideView = (i, k) => ({ label: say(i[k].label), line: say(i[k].line), clues: clues(i[k].fx), cost: Math.max(0, -cardCost(t, i[k].fx)), later: laterOf(i[k]) });
+    const say = (text) => catWords(t.cat, text, ctx.charity_name || null);
+    // A side that buys an upgrade shows the upgrade's price and effects.
+    const sideFx = (side) => { const u = side.buys && ALL_UPGRADES[side.buys]; return u ? { cash: -u.cost, income: u.income || 0, happy: u.happy || 0 } : side.fx; };
+    const sideView = (i, k) => ({ label: say(i[k].label), line: say(i[k].line), clues: clues(sideFx(i[k])), cost: i[k].buys ? Math.max(0, -sideFx(i[k]).cash) : Math.max(0, -cardCost(t, i[k].fx)), later: laterOf(i[k]), buys: i[k].buys || null });
     return {
       day: t.day,
       happiness: t.happiness,
@@ -852,6 +920,7 @@
       unlock_at: UNLOCK_AT,
       motto: motto(t),
       report: t.report,
+      expired_yesterday: (t.report && t.report.expired) || 0,
       cat: t.cat ? { name: t.cat.name, pronoun: t.cat.pronoun, coat: t.cat.coat, owned: [...t.cat.owned], wearing: { ...t.cat.wearing }, spent: t.cat.spent || 0, since: t.cat.since } : null,
       plots: Object.entries(PLOTS).map(([slot, p]) => {
         const b = building(slot, t.plots[slot]);
@@ -890,7 +959,7 @@
         return { id: i.id, title: say(i.title), setup: say(i.setup), ask: say(i.ask || ''), general: !i.needs, chosen: s.chosen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), preston: sideView(i, 'preston'), dolores: sideView(i, 'dolores') };
       }).filter(Boolean),
       // The whole collection, for the deck view.
-      deck: ISSUES.map((i) => {
+      deck: ISSUES.filter((i) => !i.draft || adminOpen(t, i.id)).map((i) => {
         const slot = (t.issues || []).find((s) => s.id === i.id);
         const status = slot ? (slot.chosen ? 'played' : 'today') : (needsMet(i.needs, t, ctx) || adminOpen(t, i.id)) ? 'available' : 'locked';
         const seen = t.played.includes(i.id);
@@ -902,5 +971,5 @@
     };
   }
 
-  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, view, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch, CAT_ITEMS, CAT_COATS, catWords, cleanCatName, nameCat, buyCatItem, wearCatItem };
+  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, view, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch, metersHidden, TIMED_FLAGS, CAT_ITEMS, CAT_COATS, catWords, cleanCatName, nameCat, buyCatItem, wearCatItem };
 }));
