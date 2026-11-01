@@ -39,8 +39,8 @@
           pitch: { who: 'preston', line: 'Forty units where there used to be eight. Walls are a luxury, and we are not in the luxury business.' },
           sign: 'Now leasing. Always leasing.',
           upgrades: {
-            fourth_floor: { name: 'A fourth floor', tier: 'bad', cost: 30, income: 8, happy: -2, needs: { days: 2 }, pitch: { who: 'preston', line: 'Zoning is a suggestion. Gravity is a stronger suggestion, but we have insurance.' }, objection: 'The third floor is held up by a rumor.' },
-            boiler: { name: 'Fix the boiler', tier: 'good', cost: 25, happy: 3, needs: { happiness_below: 50 }, pitch: { who: 'dolores', line: 'Heat. In winter. I know. Radical.' }, objection: 'Sweaters are cheaper, and they come in colors.' },
+            fourth_floor: { name: 'A fourth floor', tier: 'bad', cost: 30, income: 8, happy: -2, needs: { days: 2 }, pitch: { who: 'preston', line: 'Zoning is a suggestion. Gravity is a stronger suggestion, but we have insurance.' }, objection: 'The third floor is held up by a rumor.', alt: { name: 'A fourth floor, to code', tier: 'compromise', cost: 45, income: 4, happy: 1, line: 'Fine. Add a floor. With stairs, walls and a permit, in that order.' } },
+            boiler: { name: 'Fix the boiler', tier: 'good', cost: 25, happy: 3, needs: { happiness_below: 50 }, pitch: { who: 'dolores', line: 'Heat. In winter. I know. Radical.' }, objection: 'Sweaters are cheaper, and they come in colors.', alt: { name: 'Space heaters, rented', tier: 'bad', cost: 10, income: 2, happy: -1, line: 'Warmth is a service. Services have monthly plans.' } },
           },
         },
         pinnacle: {
@@ -48,8 +48,8 @@
           pitch: { who: 'preston', line: '"Luxury living." Granite-look countertops. The rooftop pool is coming soon, legally speaking.' },
           sign: 'Elevated living. Elevator pending.',
           upgrades: {
-            doorman: { name: 'A doorman', tier: 'compromise', cost: 25, income: 3, happy: 1, needs: { days: 1 }, pitch: { who: 'preston', line: 'He says "welcome home." It is in his contract and, as of today, in their lease.' }, objection: 'A doorman who also reports who comes home late. I read the contract.' },
-            pool: { name: 'The actual pool', tier: 'good', cost: 40, happy: 4, income: -1, needs: { lobbyists: 5 }, pitch: { who: 'dolores', line: 'You advertised a pool. This is the pool. It is small. It is wet. It counts.' }, objection: '"Coming soon" is a promise with no end date. It is the best kind.' },
+            doorman: { name: 'A doorman', tier: 'compromise', cost: 25, income: 3, happy: 1, needs: { days: 1 }, pitch: { who: 'preston', line: 'He says "welcome home." It is in his contract and, as of today, in their lease.' }, objection: 'A doorman who also reports who comes home late. I read the contract.', alt: { name: 'A doorman who just opens doors', tier: 'good', cost: 25, income: 0, happy: 3, line: 'Same doorman. No clipboard. He holds the door, and that is the whole job.' } },
+            pool: { name: 'The actual pool', tier: 'good', cost: 40, happy: 4, income: -1, needs: { lobbyists: 5 }, pitch: { who: 'dolores', line: 'You advertised a pool. This is the pool. It is small. It is wet. It counts.' }, objection: '"Coming soon" is a promise with no end date. It is the best kind.', alt: { name: 'A members-only pool', tier: 'bad', cost: 40, income: 6, happy: -2, line: 'Exclusivity is an amenity. So is a wristband.' } },
           },
         },
         coop: {
@@ -57,8 +57,8 @@
           pitch: { who: 'dolores', line: 'They own it together and fix the boiler themselves. Costs you upkeep, pays you nothing. They will never forget it.' },
           sign: 'Meeting Thursday. Still.',
           upgrades: {
-            garden: { name: 'Community garden', tier: 'good', cost: 20, happy: 3, income: -1, needs: { days: 2 }, pitch: { who: 'dolores', line: 'Tomatoes. Morale. Same thing, in August.' }, objection: 'Dirt. You would be paying for dirt. Premium dirt, but dirt.' },
-            tours: { name: 'Paid co-op tours', tier: 'bad', cost: 20, income: 6, happy: -2, needs: { cash: 60 }, pitch: { who: 'preston', line: 'Tourists love authenticity. We love charging for it. Everyone wins, except the residents, who are the exhibit.' }, objection: 'They live there. It is not a zoo. It is barely a co-op.' },
+            garden: { name: 'Community garden', tier: 'good', cost: 20, happy: 3, income: -1, needs: { days: 2 }, pitch: { who: 'dolores', line: 'Tomatoes. Morale. Same thing, in August.' }, objection: 'Dirt. You would be paying for dirt. Premium dirt, but dirt.', alt: { name: 'A sponsored garden', tier: 'compromise', cost: 15, income: 2, happy: 1, line: 'Same tomatoes. Each one has a logo.' } },
+            tours: { name: 'Paid co-op tours', tier: 'bad', cost: 20, income: 6, happy: -2, needs: { cash: 60 }, pitch: { who: 'preston', line: 'Tourists love authenticity. We love charging for it. Everyone wins, except the residents, who are the exhibit.' }, objection: 'They live there. It is not a zoo. It is barely a co-op.', alt: { name: 'A free open house', tier: 'good', cost: 10, income: 0, happy: 2, line: 'Once a month, people can come see it. Nobody pays. Nobody is the exhibit.' } },
           },
         },
       },
@@ -71,18 +71,18 @@
           pitch: { who: 'preston', line: 'No clocks, no windows, free drinks. They have a wonderful time and we keep the change. All of the change.' },
           sign: 'The house always wins. You are the house.',
           upgrades: {
-            vip: { name: 'VIP room', tier: 'bad', cost: 35, income: 10, happy: -3, needs: { lobbyists: 5 }, pitch: { who: 'preston', line: 'A velvet rope. The rope is the product. The room is just where the rope is.' }, objection: 'A smaller room where the same people lose more. Bold.' },
-            coffee: { name: 'Free coffee', tier: 'compromise', cost: 15, happy: 1, needs: { days: 1 }, pitch: { who: 'preston', line: 'Keeps them awake. Keeps them playing. Technically a benefit.' }, objection: 'Free coffee in a casino is not kindness. It is logistics.' },
+            vip: { name: 'VIP room', tier: 'bad', cost: 35, income: 10, happy: -3, needs: { lobbyists: 5 }, pitch: { who: 'preston', line: 'A velvet rope. The rope is the product. The room is just where the rope is.' }, objection: 'A smaller room where the same people lose more. Bold.', alt: { name: 'A help desk', tier: 'good', cost: 20, income: -3, happy: 4, line: 'A room where people can ask to be stopped. Staffed. Well lit.' } },
+            coffee: { name: 'Free coffee', tier: 'compromise', cost: 15, happy: 1, needs: { days: 1 }, pitch: { who: 'preston', line: 'Keeps them awake. Keeps them playing. Technically a benefit.' }, objection: 'Free coffee in a casino is not kindness. It is logistics.', alt: { name: 'Coffee, and clocks on the walls', tier: 'good', cost: 15, income: -1, happy: 3, line: 'Coffee is nice. Knowing what time it is is nicer.' } },
           },
         },
         store: {
           name: 'Company Store', tier: 'compromise', income: 8, happy: -2, cost: 40,
           pitch: { who: 'preston', line: 'It is the only store. Prices are fair, by which I mean they are prices.' },
-          sign: 'Everything you need. Nothing you can afford. Cards cost 20% less here.',
+          sign: 'Everything you need. Nothing you can afford.',
           card_discount: 0.2,
           upgrades: {
-            loyalty: { name: 'Loyalty card', tier: 'bad', cost: 20, income: 5, happy: -1, needs: { days: 1 }, pitch: { who: 'preston', line: 'Every tenth purchase is 4% off. Every purchase is tracked. Loyalty is a two-way street with one lane.' }, objection: 'It is a surveillance program with a punch card.' },
-            pricematch: { name: 'Price match', tier: 'good', cost: 20, happy: 2, income: -2, needs: { happiness_below: 50 }, pitch: { who: 'dolores', line: 'Match the store across the river. If they can, you can.' }, objection: 'The store across the river is a lie we tell new hires.' },
+            loyalty: { name: 'Loyalty card', tier: 'bad', cost: 20, income: 5, happy: -1, needs: { days: 1 }, pitch: { who: 'preston', line: 'Every tenth purchase is 4% off. Every purchase is tracked. Loyalty is a two-way street with one lane.' }, objection: 'It is a surveillance program with a punch card.', alt: { name: 'A loyalty card that pays', tier: 'good', cost: 20, income: -1, happy: 3, line: 'Points that turn into groceries. No tracking. Revolutionary.' } },
+            pricematch: { name: 'Price match', tier: 'good', cost: 20, happy: 2, income: -2, needs: { happiness_below: 50 }, pitch: { who: 'dolores', line: 'Match the store across the river. If they can, you can.' }, objection: 'The store across the river is a lie we tell new hires.', alt: { name: 'Price match, terms apply', tier: 'bad', cost: 10, income: 2, happy: -1, line: 'We match any price. The terms are on the back of the receipt, in a font.' } },
           },
         },
         clinic: {
@@ -90,8 +90,8 @@
           pitch: { who: 'dolores', line: 'A doctor, two nurses, no billing department. Healthy lobbyists stay on the payroll.' },
           sign: 'Walk-ins welcome. Limp-ins too.',
           upgrades: {
-            dental: { name: 'Dental wing', tier: 'good', cost: 30, happy: 3, income: -2, needs: { days: 3 }, pitch: { who: 'dolores', line: 'Teeth are health. Legally, somehow, they are not. Here, they are.' }, objection: 'Teeth are optional. I have checked with several lobbyists.' },
-            billing: { name: 'Billing department', tier: 'bad', cost: 25, income: 7, happy: -3, needs: { cash: 80 }, pitch: { who: 'preston', line: 'Free is a price point. We could explore other price points.' }, objection: '"Free Clinic" is on the sign. The sign was forty dollars.' },
+            dental: { name: 'Dental wing', tier: 'good', cost: 30, happy: 3, income: -2, needs: { days: 3 }, pitch: { who: 'dolores', line: 'Teeth are health. Legally, somehow, they are not. Here, they are.' }, objection: 'Teeth are optional. I have checked with several lobbyists.', alt: { name: 'Cosmetic dentistry', tier: 'bad', cost: 30, income: 5, happy: -1, line: 'Whitening is dental. Cavities are a lifestyle choice.' } },
+            billing: { name: 'Billing department', tier: 'bad', cost: 25, income: 7, happy: -3, needs: { cash: 80 }, pitch: { who: 'preston', line: 'Free is a price point. We could explore other price points.' }, objection: '"Free Clinic" is on the sign. The sign was forty dollars.', alt: { name: 'A billing desk that explains', tier: 'compromise', cost: 15, income: 2, happy: 1, line: 'Same bills. Someone answers the phone and says what they are for.' } },
           },
         },
       },
@@ -458,6 +458,9 @@
     // Upgrades the player sided against in the Site Office: still for sale,
     // no longer nagging. Cleared when the building comes down.
     if (!t.passed) t.passed = { housing: [], square: [] };
+    // Which take of each owned upgrade: 'alt' for the other advisor's version
+    // (absent means the proposer's, which is every upgrade bought before takes).
+    if (!t.upgrade_take || typeof t.upgrade_take !== 'object') t.upgrade_take = {};
     if (!t.played) t.played = [];
     if (!t.flags) t.flags = [];
     if (!t.last) t.last = {};
@@ -513,11 +516,30 @@
     mugs: 'mixed', box_read: 'mixed', wild_lawn: 'mixed', wifi_free: 'mixed', casual: 'mixed', newsletter_free: 'mixed',
   };
   const laterOf = (side) => (side.sets && FOLLOWED.has(side.sets) ? (LATER[side.sets] || 'mixed') : null);
+  // What the card tells the player about a choice's later effect. The truth
+  // would give the game away (Dolores is usually 'good', Preston 'bad'), so it
+  // only shows when it's true AND balances how the choice looks right now:
+  // "could pay off" on a side that looks very weak, "could come back to bite"
+  // on one that looks too good. Anything else that leads somewhere is 'mixed'
+  // ("something comes of this"). Looks = cash + a week of income + happiness,
+  // in $K; "very" = 12 or more apart from the other side.
+  function laterShown(issue, k) {
+    const truth = laterOf(issue[k]);
+    if (!truth) return null;
+    const fx = (side) => { const u = side.buys && ALL_UPGRADES[side.buys]; return u ? { cash: -u.cost, income: u.income || 0, happy: u.happy || 0 } : (side.fx || {}); };
+    const looks = (f) => (f.cash || 0) + 7 * (f.income || 0) + (f.happy || 0);
+    const gap = looks(fx(issue[k])) - looks(fx(issue[k === 'preston' ? 'dolores' : 'preston']));
+    if (truth === 'good' && gap <= -12) return 'good';
+    if (truth === 'bad' && gap >= 12) return 'bad';
+    return 'mixed';
+  }
 
   function building(slot, key) { return key ? PLOTS[slot].options[key] : null; }
+  // The numbers of the take a player bought: the proposer's, or the other advisor's.
+  const takeOf = (t, key, u) => (u && u.alt && t.upgrade_take && t.upgrade_take[key] === 'alt' ? u.alt : u);
   function ownedUpgrades(t, slot) {
     const b = building(slot, t.plots[slot]);
-    return b ? ((t.upgrades && t.upgrades[slot]) || []).map((k) => b.upgrades[k]).filter(Boolean) : [];
+    return b ? ((t.upgrades && t.upgrades[slot]) || []).map((k) => takeOf(t, k, b.upgrades[k])).filter(Boolean) : [];
   }
 
   // Per-day effect of one plot, building plus its upgrades.
@@ -825,6 +847,7 @@
       if (!canPay(cashAvailable, u.cost)) return { error: `That costs $${u.cost}K and you have ${kStr(cashAvailable)} on the coin.` };
       paid = charge(cashAvailable, u.cost);
       t.upgrades[u.slot].push(card.buys);
+      delete t.upgrade_take[card.buys]; // a card buys the proposer's take
       t.passed[u.slot] = t.passed[u.slot].filter((k) => k !== card.buys);
       fx = { cash: -u.cost, income: u.income || 0, happy: u.happy || 0 };
     } else {
@@ -854,24 +877,31 @@
     const cost = PLOTS[slot].options[key].cost || BUILD_COST;
     if (!canPay(cashAvailable, cost)) return { error: `${PLOTS[slot].options[key].name} costs $${cost}K. You have ${kStr(cashAvailable)} on the coin.` };
     t.plots[slot] = key;
+    for (const k of t.upgrades[slot] || []) delete t.upgrade_take[k];
     t.upgrades[slot] = []; // the old building's upgrades go with it
     t.passed[slot] = [];
     t.built[slot] = day;
     return { cash: charge(cashAvailable, cost) };
   }
 
-  function upgrade(t, slot, key, cashAvailable, ctx = {}) {
+  // Buy one take of an upgrade: 'main' (whoever proposed it) or 'alt' (the
+  // other advisor's version). Owning either settles it; the other is gone.
+  function upgrade(t, slot, key, cashAvailable, ctx = {}, take = 'main') {
     migrate(t);
     const b = own(PLOTS, slot) && building(slot, t.plots[slot]);
     if (!b) return { error: 'Build something there first.' };
     const u = own(b.upgrades, key) ? b.upgrades[key] : null;
     if (!u) return { error: `${b.name} doesn't offer that.` };
+    if (take !== 'main' && take !== 'alt') return { error: 'Which version?' };
+    if (take === 'alt' && !u.alt) return { error: `${u.name} only comes one way.` };
+    const v = take === 'alt' ? u.alt : u;
     if (t.upgrades[slot].includes(key)) return { error: 'Already built.' };
-    if (!needsMet(u.needs, t, { ...ctx, cash: cashAvailable }, slot)) return { error: `${u.name} isn't on the table yet. ${needsText(u.needs)}` };
-    if (!canPay(cashAvailable, u.cost)) return { error: `${u.name} costs $${u.cost}K. You have ${kStr(cashAvailable)} on the coin.` };
+    if (!needsMet(u.needs, t, { ...ctx, cash: cashAvailable }, slot)) return { error: `${v.name} isn't on the table yet. ${needsText(u.needs)}` };
+    if (!canPay(cashAvailable, v.cost)) return { error: `${v.name} costs $${v.cost}K. You have ${kStr(cashAvailable)} on the coin.` };
     t.upgrades[slot].push(key);
+    if (take === 'alt') t.upgrade_take[key] = 'alt'; else delete t.upgrade_take[key];
     t.passed[slot] = t.passed[slot].filter((k) => k !== key);
-    return { cash: charge(cashAvailable, u.cost) };
+    return { cash: charge(cashAvailable, v.cost), take, name: v.name, who: take === 'alt' ? (u.pitch.who === 'preston' ? 'dolores' : 'preston') : u.pitch.who };
   }
 
   // Side with whoever objects to an upgrade: nothing is bought, and it stops
@@ -932,7 +962,7 @@
     const say = (text) => catWords(t.cat, text, ctx.charity_name || null);
     // A side that buys an upgrade shows the upgrade's price and effects.
     const sideFx = (side) => { const u = side.buys && ALL_UPGRADES[side.buys]; return u ? { cash: -u.cost, income: u.income || 0, happy: u.happy || 0 } : side.fx; };
-    const sideView = (i, k) => ({ label: say(i[k].label), line: say(i[k].line), clues: clues(sideFx(i[k])), cost: i[k].buys ? Math.max(0, -sideFx(i[k]).cash) : Math.max(0, -cardCost(t, i[k].fx)), later: laterOf(i[k]), buys: i[k].buys || null });
+    const sideView = (i, k) => ({ label: say(i[k].label), line: say(i[k].line), clues: clues(sideFx(i[k])), cost: i[k].buys ? Math.max(0, -sideFx(i[k]).cash) : Math.max(0, -cardCost(t, i[k].fx)), later: laterShown(i, k), buys: i[k].buys || null });
     return {
       day: t.day,
       happiness: t.happiness,
@@ -963,6 +993,9 @@
               const owned = t.upgrades[slot].includes(uk);
               return {
                 key: uk, name: u.name, tier: u.tier, cost: u.cost, pitch: u.pitch, objection: u.objection,
+                // The other advisor's take on the same thing.
+                alt: u.alt ? { name: u.alt.name, tier: u.alt.tier, cost: u.alt.cost, line: u.alt.line, who: u.pitch.who === 'preston' ? 'dolores' : 'preston', effects: fxOf(u.alt), clues: dailyClues(u.alt) } : null,
+                take: owned ? (u.alt && t.upgrade_take[uk] === 'alt' ? 'alt' : 'main') : null,
                 owned,
                 passed: !owned && t.passed[slot].includes(uk),
                 status: owned ? 'owned' : needsMet(u.needs, t, ctx, slot) ? 'available' : 'locked',
@@ -994,5 +1027,5 @@
     };
   }
 
-  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, passUpgrade, view, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch, metersHidden, TIMED_FLAGS, CAT_ITEMS, CAT_COATS, catWords, cleanCatName, nameCat, buyCatItem, wearCatItem };
+  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, passUpgrade, view, laterShown, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch, metersHidden, TIMED_FLAGS, CAT_ITEMS, CAT_COATS, catWords, cleanCatName, nameCat, buyCatItem, wearCatItem };
 }));

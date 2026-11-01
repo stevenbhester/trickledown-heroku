@@ -76,6 +76,19 @@ const crypto = [
   ['LINK', 'Chainlink', 'chainlink', 'Unhinged'],
   ['AVAX', 'Avalanche', 'avalanche-2', 'Unhinged'],
   ['SHIB', 'Shiba Inu', 'shiba-inu', 'Unhinged'],
+  ['BNB', 'BNB', 'binancecoin', 'Spicy'],
+  ['XLM', 'Stellar', 'stellar', 'Unhinged'],
+  ['HBAR', 'Hedera', 'hedera-hashgraph', 'Unhinged'],
+  ['UNI', 'Uniswap', 'uniswap', 'Unhinged'],
+  ['AAVE', 'Aave', 'aave', 'Unhinged'],
+  ['HYPE', 'Hyperliquid', 'hyperliquid', 'Unhinged'],
+  ['ONDO', 'Ondo', 'ondo-finance', 'Unhinged'],
+  ['PEPE', 'Pepe', 'pepe', 'Unhinged'],
+  ['BONK', 'Bonk', 'bonk', 'Unhinged'],
+  ['WIF', 'dogwifhat', 'dogwifcoin', 'Unhinged'],
+  ['FLOKI', 'Floki', 'floki', 'Unhinged'],
+  // Gold on the blockchain: one token is one ounce, and it trades all weekend.
+  ['PAXG', 'Pax Gold (gold token)', 'pax-gold', 'Calm'],
 ];
 
 const CURATED = [

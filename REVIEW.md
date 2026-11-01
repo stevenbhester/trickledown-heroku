@@ -1069,6 +1069,114 @@ and Today and Lobbyfest show a banner.
   market is open at most 6.5 of any 24 hours. Add 2029 holidays when NYSE
   publishes them; after 2028 every weekday counts as open.
 
+## Polish after 20261030d (build 20261030e, API 15)
+
+- **Welcome-back review:** the "Also while you were out" list no longer says
+  the matured positions are "waiting on the coin" (the review just showed
+  them), and the list appears only when something actually happened (the
+  same bar as the digest); an allowance on its own isn't news.
+- **Asset list scrolls on phones.** It picked on touch-down, so starting a
+  scroll picked whatever was under the finger. It picks on click now (a drag
+  never becomes one); mousedown is stopped so the search field keeps focus.
+- **Site Office copy** trimmed: no shop explainer paragraph, no "including
+  upgrades" note.
+- **Invite links make sense to a stranger.** A signed-out profile opens
+  with what the game is ("{name} invited you to Trickle Down", the landing
+  page's three lines, "Below: how {name} is playing it") and one button,
+  **Play for yourself →**, which runs the landing page's training and ends in
+  guest / create an account / sign in. The pinned bar at the bottom stays
+  tucked away until the intro scrolls off. A new account follows the inviter
+  (unchanged). *Changed:* someone already playing now follows the inviter
+  too, whether they open the link signed in or sign in from it, and lands on
+  the inviter's profile. Adding someone opens your wall to them, so the
+  profile says so right by Remove friend ("Added from {name}'s invite. They
+  can read and write on your wall now."). Plain profile links (`/#u/name`, no `?from=`)
+  add nobody. Google sign-up now uses the invite too (it was missed before).
+  `/friends/invite` returns `added` (false when they already were friends).
+- **More coins** on the featured list (BNB, XLM, HBAR, UNI, AAVE, HYPE, ONDO,
+  PEPE, BONK, WIF, FLOKI) and Pax Gold. No API change.
+
+## Rides, cats, short invites, quiet-market marks (build 20261031a, API 16)
+
+- **Rides pay full tax now.** Riding is collecting and putting it all
+  straight back: same tax, same lobbyists. The tax break (half now, half
+  deferred and forgiven at maturity) is gone. What a ride buys is the
+  multiplier: it starts where the last day ended instead of at ×1 and climbs
+  one more step, to ×20 for stocks and ×10 for crypto (`RIDE_MAX_STEPS`
+  now defaults to 1, so it stays at that cap after). The ride box, the
+  matured-position line, the FAQ and the ride toast say so. `RIDE_TAX_FACTOR`
+  is gone; open rides from before keep their deferred tax until they mature.
+- **Pet the cat.** On someone's profile (signed in, not your own), tap the cat
+  or ✋ Pet, and 🐟 Treat: once each per visitor, per cat, per day
+  (`cat_visits`, `POST /players/:name/cat`). Counts show on the profile, and
+  the owner's "while you were out" says who stopped by. Cosmetic only.
+- **Chibi cats.** The portrait and the village sprite are redrawn: big head,
+  big shiny eyes, blush, paws, tail. Resting animation in CSS: breathing, a
+  blink, an ear flick, a tail swish, phase-shifted per cat, off for reduced
+  motion. Outfits sit on the new head through per-slot transforms.
+- **Short invite links.** Share makes `/#@name` instead of
+  `/#u/name?from=name`; the long form still works.
+- **Quiet-market marks.** A stock row in the picker gets 🌙 (market closed)
+  or ⏳ (closes soon) when the next 24 hours would miss at least 40% of a
+  normal trading day (under 3.9 of its 6.5 hours) or the market is closed
+  now; same rule as the Buy-box notice and crypto-first (it was "under half"
+  before). The title says when it opens or closes.
+- **Plain-language pass.** Two independent reads of every screen (phone,
+  light), then cuts. Nothing rule-bearing was dropped; repeated or padded
+  lines were. Highlights: the Collect/Ride sheet says the lobbyist count once
+  (in the hire row) and the ride box is two short lines; Sell early no
+  longer says "×5 in 3h" twice; the quiet-market note is one line; the
+  first Today drops the extra "Buy" heading and the coin's duplicate "$100K
+  on the coin"; positions say "Price +1.2% since you bought" instead of
+  "Real move"; a single matured position's review verdict no longer repeats
+  its own row; the locked town says "opens with your first lobbyist" once,
+  not three times; the Site Office build intro is three short lines; the
+  deck's headline cards don't each repeat "everyone gets one"; Lobbyfest,
+  Leaders, Ledger, FAQ, trophies and training slides 3-4 are tighter;
+  "TrickleTown Hall" is "Town Hall" everywhere, "Achievements" is
+  "Trophies" everywhere, "Recruit" is "Invite someone". The Company Store's
+  sign no longer repeats its own perk line (town.js, both copies).
+- **Fixes found by the pass:**
+  - The Collect/Sell sheet and the trophy-gift preview ignored the featured
+    charity's ×1.25, so they showed fewer lobbyists than the server hires.
+    They apply it now when the player's default charity is the featured one
+    (and the "featured this week" line only shows then). The demo applies it
+    too.
+  - Records called a ride "rode on, half tax"; it's "rode on".
+  - Training slide 1 said wins send the ad money to charity; the money goes
+    either way, gains decide where. Slide 3 keeps "losses aren't taxed".
+  - Signing out a guest now asks first: a guest can't sign back in. The
+    footer's extra Sign out link is gone (Account and the menu have it).
+  - Friends copy and the FAQ now say added friends can *read* and write on
+    your wall, not just write.
+  - The Sell early sheet no longer shows the "if it lands as a profit, the
+    lobbyists go to…" box on a losing position.
+  - "How much money do I get?" now says the town's daily profit (or loss)
+    is part of it, and the digest says "$8K of that came from TrickleTown"
+    instead of reading like extra money.
+
+## Upgrade takes, honest card hints, Simple mode beta (build 20261031b, API 17)
+
+- **Every upgrade is a choice of two takes.** Each upgrade now has the other
+  advisor's version (`alt` in town.js: name, price, numbers, line): Preston's
+  always makes more money, Dolores's always makes people happier. The shop
+  row shows both side by side with a Buy on each, plus **Not now** (the old
+  pass: clears the nag, both stay for sale, no receipt now). Buying one
+  settles the upgrade. `POST /town/upgrade` takes `take: 'main' | 'alt'`
+  (hence API 17); `town.upgrade_take` remembers which; the view, profile and
+  ledger name the take. Upgrades owned before count as the original take, as
+  do upgrades a card buys. A new building clears the takes.
+- **Card hints stop giving the game away.** `laterShown()` shows "✨ could pay
+  off" only when it's true and the side looks very weak right now, and "⚠️
+  could come back to bite" only when it's true and the side looks too good
+  (cash + a week of income + happiness, in $K, 12 or more apart). Everything
+  else that leads somewhere says "🔮 something comes of this". Same rule after
+  the pick, in the deck.
+- **Simple mode (beta).** Account → Simple mode, per device. A calmer layout
+  in `css/beta.css`, a tab bar, explanations behind ⓘ (see the front end's
+  README). The classic layout is untouched with it off (tested: no attribute,
+  no tab bar, no tips). Bottom pop-ups ride above the tab bar.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

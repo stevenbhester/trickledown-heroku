@@ -58,11 +58,6 @@
       "description": "Real ad revenue collected this quarter, shown on the Lobby page.",
       "value": "0"
     },
-    "RIDE_TAX_FACTOR": {
-      "description": "Letting a winner ride is taxed at TAX_RATE times this (0.5 = half rate).",
-      "value": "0.5",
-      "required": false
-    },
     "GUEST_TTL_DAYS": {
       "description": "Guest accounts that never hired a lobbyist are deleted after this many idle days.",
       "value": "45",
@@ -99,8 +94,8 @@
       "required": false
     },
     "RIDE_MAX_STEPS": {
-      "description": "How many rides keep raising the multiplier (stocks ×10 → ×20 → ×30) before it runs flat.",
-      "value": "2",
+      "description": "How many rides keep raising the multiplier (1: stocks ×10 → ×20, crypto ×5 → ×10) before it runs flat at that cap.",
+      "value": "1",
       "required": false
     },
     "VAPID_PUBLIC": {

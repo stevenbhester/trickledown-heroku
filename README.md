@@ -33,25 +33,23 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
   and current multiplier. A profit is taxed `TAX_RATE` (25%); losses aren't.
   A position at zero can be "buried" (same endpoint). The receipt and history
   carry `collected: true|false`.
-- `/ride` ("let it ride") is the third option for a matured position: the
-  profit so far is taxed at `TAX_RATE × RIDE_TAX_FACTOR` (12.5% by default,
-  half the collect rate), those lobbyists are hired for the chosen charity,
-  and what's left is reinvested in the same asset at today's price as a new
-  position. The old one's status becomes `rolled`; it shows in history with
-  `rode: true` and counts on the 24h board. `ride_count` and `origin_invested`
-  follow the chain so the UI can say "riding ×3, started with $50".
-  - **The multiplier keeps climbing.** The new position's `mult_floor` is the
-    old ceiling and its `multiplier` is one base multiplier higher: stocks
-    ×10 → ×20 on the second day, ×20 → ×30 on the third; crypto ×5 → ×10 →
-    ×15. After `RIDE_MAX_STEPS` (2) rides it runs flat at the cap. A ride
-    at ×20 dies on a 5% dip, which is the point.
-  - **The other half of the tax is deferred**, stored as `deferred_tax` on
-    the new position. Sell the ride early and it comes due (so an early sell
-    of a ride really is full rate on the original profit, plus the usual tax
-    on anything new); hold it to maturity and it's forgiven. Without this,
-    ride-then-sell-early seconds later at the same cached price realized the
-    gain at half tax with no risk taken. Without any tax at all, riding was
-    strictly better than collecting and the charity never saw a cent.
+- `/ride` ("let it ride") is the third option for a matured position: it's
+  collected exactly as `/sell` would (the profit taxed at the full `TAX_RATE`,
+  those lobbyists hired for the chosen charity), and everything left is
+  reinvested in the same asset at today's price as a new position. The old
+  one's status becomes `rolled`; it shows in history with `rode: true` and
+  counts on the 24h board. `ride_count` and `origin_invested` follow the chain
+  so the UI can say "riding ×3, started with $50".
+  - **What a ride buys is the multiplier.** The new position's `mult_floor` is
+    the old ceiling and its `multiplier` is one base multiplier higher: a stock
+    runs ×10 → ×20 on its second day, crypto ×5 → ×10. After `RIDE_MAX_STEPS`
+    (1) rides it runs flat at that cap. A ride at ×20 dies on a 5% dip, which
+    is the point.
+  - **No tax break.** Rides used to pay half the tax up front and defer the
+    rest (forgiven at maturity). That's gone: a ride pays what collecting
+    pays. Rides opened before the change still carry their `deferred_tax`
+    (due on an early sale, forgiven at maturity) until they mature; new ones
+    carry none. `rules.ride_tax_factor` is always 1, for older clients.
 - **Day one** would otherwise be "buy, then wait 24 hours". So once a
   player has invested anything, `/me` offers `vesting`: their shares in
   Trickle Down Holdings have vested and policy says sell, for `VEST_AMOUNT`
@@ -136,14 +134,15 @@ card's unlock status for the deck grid.
 | POST | `/push/unsubscribe` | ✓ | `{ endpoint? }` — this device, or all of yours |
 | POST | `/town/decide` | ✓ | `{ issue_id, side }` — play one of today's cards with Preston's or Dolores's answer; returns the real `fx` and `crowd` (how everyone else answered it today) |
 | POST | `/town/build` | ✓ | `{ slot, key }` — put a building on a plot ($40); replacing one clears its upgrades |
-| POST | `/town/upgrade` | ✓ | `{ slot, key }` — buy an upgrade for the building on a plot |
+| POST | `/town/upgrade` | ✓ | `{ slot, key, take? }` — buy an upgrade for the building on a plot. Every upgrade comes two ways: `take: 'main'` (default, whoever proposed it) or `'alt'` (the other advisor's version, `alt` in the view, with its own price and numbers). Owning either settles it; the view says which (`take`) |
 | POST | `/town/upgrade/pass` | ✓ | `{ slot, key }` — side with whoever objects to an upgrade that's on the table: nothing is bought, it stops counting in the plot's `proposals`, and it stays for sale with `passed: true` (buying it later clears that; a new building clears all passes). Returns `who` (the objector) |
 | GET | `/ledger` | ✓ | your money, newest first, 60 at a time (`?cursor=` from the last page): buys, sales, collections, gifts, achievements, card plays, buildings, upgrades, cat items, admin adjustments, each with its cash change and, where it applies, a `title` (card), `name` (building/upgrade) or item. Rides, lobbyist moves and admin removals are left out |
 | GET | `/leaderboard` | opt | this quarter's standings + career; best cash-out in the last 24h; `biggest`: the 25 largest open positions by current value (priced from quotes the game already has, no provider calls). `?friends=1` (signed in) scopes all three to your friends and you |
 | POST | `/lobbyists/assign` | yes | `{ allocation?: [{ charity_id, amount }], default_charity_id? }` — move this quarter's lobbyists between charities (the allocation must account for every one) and/or change the default charity new hires go to |
 | GET | `/friends` | ✓ | your friends with quarter/career headcount, streak, rank, town mood; `added_you` = how many players added you |
 | POST | `/friends/add` | ✓ | `{ username }` — one-directional; cap 50 |
-| POST | `/friends/invite` | ✓ | `{ from }` — a new player starts out following whoever's link brought them (`?from=`). One direction only, the same row "Add friend" makes; the inviter sees "added you" |
+| POST | `/players/:name/cat` | ✓ | `{ kind: 'pet' \| 'treat' }` — pet someone else's (named) cat or give it a treat, once each per visitor per day; returns `already` and today's `visits` (`pets`, `treats`, `you`). Profiles carry `town.pet.visits`; `/me` carries `cat_visits` (who stopped by since the last visit) |
+| POST | `/friends/invite` | ✓ | `{ from }` — whoever followed an invite link (`/#@name`, what Share makes; the older `?from=name` still works) starts out following the inviter: a new player right after their account is made, an existing player when they open the link signed in or sign in from it. One direction only, the same row "Add friend" makes; the inviter sees "added you". `added` is false when they already were |
 | POST | `/friends/remove` | ✓ | `{ username }` |
 | GET | `/players/:username` | opt | a player's public sheet: open positions with live values, headcounts, rank, cash in play, favourite charity, town summary, `is_friend` / `added_you` for the viewer. If the owner played "Hide the meters" (card 66) in the last 7 days, everyone else gets `happiness`, `income` and `hire_cost` as null and `meters_hidden: true` (the friends list nulls `town.happiness` the same way) |
 
@@ -243,6 +242,12 @@ refreshed from the providers a minute after boot and daily. The curated
 list (with the Calm/Spicy/Unhinged moods) is always present, is what the
 picker shows before you type, and is the whole universe without a live feed
 or with `ASSET_UNIVERSE=curated`. Search is server-side.
+
+The curated list has 42 stocks and ETFs and 22 coins, including Pax Gold
+(PAXG, a token for an ounce of gold) as a calm thing to hold over a weekend.
+A curated coin wins its ticker over a stock with the same one (LINK is
+Chainlink, not Interlink), so coins whose tickers are real US stocks (SUI,
+TRX, BCH, NEAR, ATOM, FET, APT) are left off it on purpose.
 
 A symbol that drops out of the list is treated as delisted: open positions
 freeze at their entry price and can be collected.

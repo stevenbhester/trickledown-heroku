@@ -72,7 +72,7 @@ function effectiveMultiplier(p, at = Date.now()) {
 // The multipliers for a ride off a matured position: the new day starts at
 // the old ceiling and climbs by the asset's base multiplier again (stocks
 // ×10 → ×20, crypto ×5 → ×10), up to RIDE_MAX_STEPS rides past the first
-// day; after that it rides flat at the cap.
+// day (1 by default); after that it rides flat at the cap.
 function rideMultipliers(prev, base) {
   const cap = base * (1 + cfg.rideMaxSteps);
   const floor = Math.min(prev.multiplier, cap);
@@ -114,8 +114,9 @@ function tierFor({ invested, value }) {
 }
 
 // Closing a position: profit is taxed, loss is not. The tax is the donation.
-// `deferred` is tax carried over from a ride (the half it skipped): charged
-// here when a ride is sold early, never more than what's left.
+// `deferred` is tax carried over from a ride made before rides paid full tax
+// (the half it skipped): charged here when such a ride is sold early, never
+// more than what's left. New rides carry none.
 function settle({ invested, value, deferred = 0 }, rate = cfg.taxRate) {
   const profit = round2(value - invested);
   const own = profit > 0 ? round2(profit * rate) : 0;

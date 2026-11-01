@@ -116,7 +116,8 @@ ALTER TABLE positions ADD COLUMN IF NOT EXISTS origin_invested NUMERIC(14,2);
 UPDATE positions SET origin_invested = invested WHERE origin_invested IS NULL;
 -- A ride's multiplier climbs from where the last one ended (mult_floor) to a
 -- higher ceiling (multiplier). The half of the tax it skipped is deferred:
--- due if the ride is sold early, forgiven when it matures.
+-- due if the ride is sold early, forgiven when it matures. (Rides made before
+-- rides paid full tax; new rides store 0.)
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS mult_floor NUMERIC(6,2);
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS deferred_tax NUMERIC(14,2) NOT NULL DEFAULT 0;
 -- Set when a position had to be frozen long after its 24 hours with no
@@ -277,6 +278,19 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS events_window ON events (starts_on, ends_on);
 
 -- Daily reminders (web push), for players who turned them on.
+-- Visitors petting someone's cat or giving it a treat: one of each, per
+-- visitor, per cat, per game day.
+CREATE TABLE IF NOT EXISTS cat_visits (
+  id SERIAL PRIMARY KEY,
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  visitor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('pet', 'treat')),
+  day TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (owner_id, visitor_id, kind, day)
+);
+CREATE INDEX IF NOT EXISTS cat_visits_owner ON cat_visits (owner_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

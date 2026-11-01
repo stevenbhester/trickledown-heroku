@@ -246,7 +246,7 @@ function dayInfo(now = new Date()) {
 // The page checks this so a half-finished deploy (new page, old server) is
 // caught on sight instead of showing up as missing features. Bump it with any
 // release the page depends on; js/app.js API_WANTS must match.
-const API_VERSION = 15;
+const API_VERSION = 17;
 
 router.get('/health', (req, res) => res.json({ ok: true, api: API_VERSION, provider: cfg.priceProvider, google: google.enabled(), demo: cfg.demoMode }));
 
@@ -787,7 +787,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     user: { ...publicUser(user), quarter_donated: game.round2(quarterDonated), last_seen_at: prevSeen },
     day,
     allowance,
-    rules: { tax_rate: cfg.taxRate, ride_tax_factor: cfg.rideTaxFactor, ride_max_steps: cfg.rideMaxSteps, vest_amount: cfg.vestAmount, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
+    rules: { tax_rate: cfg.taxRate, ride_tax_factor: 1, ride_max_steps: cfg.rideMaxSteps, vest_amount: cfg.vestAmount, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
     positions,
     history,
     town: townView(user),
@@ -804,6 +804,8 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     ...(await wallUnread(user).then((w) => ({ wall_unread: w.n, wall_unread_from: w.from, wall_latest: w.latest }))),
     // "erin added you": new since you last waved it off, not yet added back.
     new_followers: await addedYou(user.id, user.followers_seen_at || null),
+    // Who petted the cat or brought a treat since the last visit.
+    cat_visits: await catVisitsSince(user.id, prevSeen),
     token: renewedToken,
   });
 }));
@@ -916,9 +918,9 @@ router.post('/buy', auth.requireUser, RL.trade, wrap(async (req, res) => {
   res.json({ ok: true, position: shapePosition(result.position, quote), cash: game.round2(result.cash), quote });
 }));
 
-// Let it ride: realize a matured position's profit at half the tax rate
-// (lobbyists get hired as usual), then roll what's left into a fresh position
-// in the same asset at today's price. The clock and the multiplier start over.
+// Let it ride: collect a matured position (the usual tax, the usual
+// lobbyists) and put everything left straight back on the same asset at
+// today's price. The clock starts over; the multiplier doesn't.
 router.post('/ride', auth.requireUser, RL.trade, wrap(async (req, res) => {
   const positionId = intId((req.body || {}).position_id);
   const charityId = Number((req.body || {}).charity_id);
@@ -940,15 +942,12 @@ router.post('/ride', auth.requireUser, RL.trade, wrap(async (req, res) => {
   const now = new Date();
   const day = game.dayKey(now);
   // Riding is a cash-out you immediately reinvest: the profit is taxed at the
-  // ride rate (half the usual), the tax hires lobbyists, and what's left rides.
-  // The other half is deferred onto the new position: due if it's sold
-  // early, forgiven when it matures. (Without that, ride-then-sell-early
-  // realized the gain at half rate with no risk taken.)
-  const rate = cfg.taxRate * cfg.rideTaxFactor;
+  // full rate, the tax hires lobbyists, and what's left rides. Nothing is
+  // deferred or forgiven. What riding buys is the multiplier: the new day
+  // starts where the old one ended (×10 for a stock) instead of at ×1.
+  const rate = cfg.taxRate;
   const s = game.settle({ invested: p.invested, value: p.matured_value }, rate);
-  const full = game.settle({ invested: p.invested, value: p.matured_value });
-  const deferred = game.round2(Math.max(0, full.tax - s.tax));
-  // The multiplier keeps climbing: the new day starts where the old one ended.
+  const deferred = 0;
   const mults = game.rideMultipliers(p, asset.multiplier);
   const hireCost = Town.hireCost(req.user.town || Town.fresh());
   let lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
@@ -1258,18 +1257,19 @@ router.post('/town/build', auth.requireUser, wrap(async (req, res) => {
 // Buy an upgrade for the building on a plot.
 router.post('/town/upgrade', auth.requireUser, wrap(async (req, res) => {
   const { slot, key } = req.body || {};
+  const take = (req.body || {}).take === 'alt' ? 'alt' : 'main';
   const result = await withTx(async (tx) => {
     const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
     if (!Town.isUnlocked(u.total_donated)) return { error: 'TrickleTown opens when you hire your first full lobbyist.' };
     const town = u.town || Town.fresh();
     u.friend_count = await friendCount(u.id, tx);
-    const r = Town.upgrade(town, String(slot || ''), String(key || ''), u.cash, townCtx(u, { day: game.dayKey() }));
+    const r = Town.upgrade(town, String(slot || ''), String(key || ''), u.cash, townCtx(u, { day: game.dayKey() }), take);
     if (r.error) return r;
     const dealt = Town.dealNewUnlocks(town, townCtx(u, { day: game.dayKey() }));
     const { rows: [u2] } = await tx.query(
       'UPDATE users SET cash = cash + $1, town = $2 WHERE id = $3 RETURNING *', [r.cash, town, u.id],
     );
-    await ledgerAdd(tx, u.id, 'upgrade', r.cash, `${String(key).slice(0, 30)} on the ${String(slot).slice(0, 20)} lot`);
+    await ledgerAdd(tx, u.id, 'upgrade', r.cash, `${String(key).slice(0, 30)}${take === 'alt' ? ' (alt)' : ''} on the ${String(slot).slice(0, 20)} lot`);
     return { user: u2, dealt };
   });
   if (result.error) return res.status(400).json({ error: result.error });
@@ -1544,12 +1544,13 @@ function ledgerWords(kind, detail) {
     const card = Town.ISSUES.find((i) => i.id === m[1]);
     return { title: card ? Town.catWords(null, card.title) : m[1], side: m[2] };
   }
-  if ((kind === 'build' || kind === 'upgrade') && (m = /^([a-z0-9_]+) on the ([a-z]+) lot/.exec(d))) {
-    const plot = Town.PLOTS[m[2]];
+  if ((kind === 'build' || kind === 'upgrade') && (m = /^([a-z0-9_]+)( \(alt\))? on the ([a-z]+) lot/.exec(d))) {
+    const has = (o, k) => o && Object.prototype.hasOwnProperty.call(o, k);
+    const plot = has(Town.PLOTS, m[3]) ? Town.PLOTS[m[3]] : null;
     let name = null;
-    if (plot && kind === 'build') name = plot.options[m[1]] && plot.options[m[1]].name;
-    if (plot && kind === 'upgrade') for (const b of Object.values(plot.options)) if (b.upgrades && b.upgrades[m[1]]) name = b.upgrades[m[1]].name;
-    return { title: name || m[1], lot: plot ? plot.label : m[2] };
+    if (plot && kind === 'build') name = has(plot.options, m[1]) ? plot.options[m[1]].name : null;
+    if (plot && kind === 'upgrade') for (const b of Object.values(plot.options)) if (has(b.upgrades, m[1])) { const u = b.upgrades[m[1]]; name = m[2] && u.alt ? u.alt.name : u.name; }
+    return { title: name || m[1], lot: plot ? plot.label : m[3] };
   }
   if (kind === 'cat' && (m = /^([a-z0-9_]+) for the cat/.exec(d))) {
     const item = Town.CAT_ITEMS.find((x) => x.id === m[1]);
@@ -2181,9 +2182,9 @@ async function playerProfile(viewer, u, day) {
         : { happiness: town.happiness, income: town.income, hire_cost: town.hire_cost }),
       motto: town.motto,
       sides: { preston: u.town.sides.preston || 0, dolores: u.town.sides.dolores || 0 },
-      pet: town.cat && town.cat.name ? { name: town.cat.name, pronoun: town.cat.pronoun, coat: town.cat.coat, wearing: town.cat.wearing, owned: town.cat.owned.length, spent: town.cat.spent } : null,
+      pet: town.cat && town.cat.name ? { name: town.cat.name, pronoun: town.cat.pronoun, coat: town.cat.coat, wearing: town.cat.wearing, owned: town.cat.owned.length, spent: town.cat.spent, visits: await catVisitsToday(u.id, viewer && !isYou ? viewer.id : null, day.key) } : null,
       buildings: town.plots.map((p) => (p.building
-        ? { slot: p.slot, label: p.label, key: p.key, name: p.building.name, tier: p.building.tier, days: p.days, upgrades: p.building.upgrades.filter((x) => x.owned).map((x) => ({ name: x.name, tier: x.tier })) }
+        ? { slot: p.slot, label: p.label, key: p.key, name: p.building.name, tier: p.building.tier, days: p.days, upgrades: p.building.upgrades.filter((x) => x.owned).map((x) => (x.take === 'alt' && x.alt ? { name: x.alt.name, tier: x.alt.tier } : { name: x.name, tier: x.tier })) }
         : { slot: p.slot, label: p.label, key: null })),
     } : null,
     is_friend: isFriend,
@@ -2192,6 +2193,46 @@ async function playerProfile(viewer, u, day) {
     wall: wallOk ? { open: true, max: WALL_MAX, posts: await wallPosts(u, viewer) } : { open: false },
   };
 }
+
+// --- Petting someone's cat -----------------------------------------------------------
+//
+// Any signed-in player can pet another player's cat, and give it a treat, once
+// each per game day. Nothing changes but the counts and a line in the owner's
+// "while you were out". The cat has to be named (and the town open) to be seen.
+async function catVisitsToday(ownerId, viewerId, dayKey) {
+  const { rows } = await query(
+    `SELECT kind, COUNT(*)::int AS n, BOOL_OR(visitor_id = $3) AS you FROM cat_visits WHERE owner_id = $1 AND day = $2 GROUP BY kind`,
+    [ownerId, dayKey, viewerId || 0],
+  );
+  const of = (k) => rows.find((r) => r.kind === k) || { n: 0, you: false };
+  return { pets: of('pet').n, treats: of('treat').n, ...(viewerId ? { you: { pet: !!of('pet').you, treat: !!of('treat').you } } : {}) };
+}
+
+// Who stopped by the cat since a moment (the owner's previous visit).
+async function catVisitsSince(ownerId, since) {
+  const { rows } = await query(
+    `SELECT v.username, BOOL_OR(c.kind = 'pet') AS pet, BOOL_OR(c.kind = 'treat') AS treat, MAX(c.created_at) AS at
+       FROM cat_visits c JOIN users v ON v.id = c.visitor_id
+      WHERE c.owner_id = $1 AND c.created_at > COALESCE($2, now() - interval '2 days')
+      GROUP BY v.username ORDER BY at DESC LIMIT 10`,
+    [ownerId, since || null],
+  );
+  return rows.map((r) => ({ username: r.username, pet: r.pet, treat: r.treat }));
+}
+
+router.post('/players/:name/cat', auth.requireUser, RL.social, wrap(async (req, res) => {
+  const kind = String((req.body || {}).kind || '');
+  if (kind !== 'pet' && kind !== 'treat') return res.status(400).json({ error: 'Pet or treat.' });
+  const owner = await findPlayer(String(req.params.name || '').slice(0, 40));
+  const cat = owner && owner.town && Town.isUnlocked(owner.total_donated) && owner.town.cat && owner.town.cat.name ? owner.town.cat : null;
+  if (!cat) return res.status(404).json({ error: 'No cat here.' });
+  if (owner.id === req.user.id) return res.status(400).json({ error: `That's your own cat. ${cat.pronoun === 'he' ? 'He' : cat.pronoun === 'they' ? 'They' : 'She'} gets plenty.` });
+  const day = dayInfo();
+  const ins = await query(
+    'INSERT INTO cat_visits (owner_id, visitor_id, kind, day) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [owner.id, req.user.id, kind, day.key],
+  );
+  res.json({ ok: true, kind, already: ins.rowCount === 0, visits: await catVisitsToday(owner.id, req.user.id, day.key) });
+}));
 
 // "today" / "this week" / "this month" / "a while ago": enough to know a
 // friend is still playing, not enough to know when they're at their desk.
@@ -2223,8 +2264,8 @@ router.get('/friends', auth.requireUser, wrap(async (req, res) => {
   res.json({ friends, added_you: followers.n, waiting: await addedYou(req.user.id, null, 50), max: MAX_FRIENDS, your_username: req.user.username, is_guest: req.user.is_guest });
 }));
 
-// An invite link (?from=<name>): a brand-new player starts out following
-// whoever sent them. One direction only, the same row "Add friend" makes, so
+// An invite link (?from=<name>): the player who followed it (new, or already
+// playing and signed in) starts out following whoever sent them. One direction only, the same row "Add friend" makes, so
 // a forged link can't put anyone on the inviter's list or open their wall;
 // the inviter sees "added you" and decides whether to add back.
 router.post('/friends/invite', auth.requireUser, RL.social, wrap(async (req, res) => {
@@ -2233,8 +2274,9 @@ router.post('/friends/invite', auth.requireUser, RL.social, wrap(async (req, res
   const inviter = await findPlayer(from);
   if (!inviter || inviter.id === req.user.id) return res.json({ ok: false });
   if ((await friendCount(req.user.id)) >= MAX_FRIENDS) return res.json({ ok: false });
-  await query('INSERT INTO friends (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.user.id, inviter.id]);
-  res.json({ ok: true, username: inviter.username });
+  const ins = await query('INSERT INTO friends (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.user.id, inviter.id]);
+  // added: false when they were already following (an existing player on an old link).
+  res.json({ ok: true, username: inviter.username, added: ins.rowCount > 0 });
 }));
 
 router.post('/friends/add', auth.requireUser, RL.social, wrap(async (req, res) => {

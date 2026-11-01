@@ -25,16 +25,15 @@ module.exports = {
   streakBonus: num(process.env.STREAK_BONUS, 10),
   dailyCap: num(process.env.DAILY_CAP, 200),
   taxRate: num(process.env.TAX_RATE, 0.25),
-  // Letting a matured winner ride is taxed too, at this fraction of TAX_RATE.
-  // The rest is deferred: due if the ride is sold early, forgiven at maturity.
-  rideTaxFactor: num(process.env.RIDE_TAX_FACTOR, 0.5),
   // Day one's windfall: after the first buy, the player's shares in Trickle
   // Down Holdings vest and must be sold, for this much pure profit. The tax
   // on it hires their first lobbyists and opens TrickleTown. 0 disables it.
   vestAmount: num(process.env.VEST_AMOUNT, 40),
-  // A ride's multiplier keeps climbing, one base multiplier per day, for this
-  // many rides; after that it rides flat at the cap (stocks ×30, crypto ×15).
-  rideMaxSteps: num(process.env.RIDE_MAX_STEPS, 2),
+  // Letting a winner ride is taxed like collecting it; what a ride buys is the
+  // multiplier: the new day starts where the old one ended and climbs one base
+  // multiplier, for this many rides, then rides flat at the cap (1: stocks
+  // ×10 → ×20, crypto ×5 → ×10).
+  rideMaxSteps: num(process.env.RIDE_MAX_STEPS, 1),
   // A position lives this long. At maturity its value freezes at that
   // moment's price until the player collects it.
   holdHours: num(process.env.HOLD_HOURS, 24),

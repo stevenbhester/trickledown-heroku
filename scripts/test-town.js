@@ -167,8 +167,9 @@ ok('old saves migrate');
 // --- Ride math (src/game.js) -----------------------------------------------------
 const game = require('../src/game');
 assert.deepStrictEqual(game.rideMultipliers({ multiplier: 10 }, 10), { floor: 10, ceiling: 20 });
-assert.deepStrictEqual(game.rideMultipliers({ multiplier: 20 }, 10), { floor: 20, ceiling: 30 });
-assert.deepStrictEqual(game.rideMultipliers({ multiplier: 30 }, 10), { floor: 30, ceiling: 30 }, 'rides run flat at the cap');
+assert.deepStrictEqual(game.rideMultipliers({ multiplier: 20 }, 10), { floor: 20, ceiling: 20 }, 'stocks cap at ×20');
+assert.deepStrictEqual(game.rideMultipliers({ multiplier: 30 }, 10), { floor: 20, ceiling: 20 }, 'an old ×30 ride comes back down to the cap');
+assert.deepStrictEqual(game.rideMultipliers({ multiplier: 10 }, 5), { floor: 10, ceiling: 10 }, 'crypto caps at ×10');
 assert.deepStrictEqual(game.rideMultipliers({ multiplier: 5 }, 5), { floor: 5, ceiling: 10 });
 const o = Date.now();
 const ride = { opened_at: new Date(o).toISOString(), matures_at: new Date(o + 864e5).toISOString(), multiplier: 20, mult_floor: 10 };
@@ -439,6 +440,42 @@ ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
   Town.passUpgrade(t2, 'housing', k2, c); Town.build(t2, 'housing', Object.keys(Town.PLOTS.housing.options).find((k) => k !== 'tenement'), 100);
   assert.deepStrictEqual(t2.passed.housing, [], 'a new building starts with no passes');
   ok('passing on an upgrade: clears the nag, stays buyable, odd keys refused');
+}
+
+// --- Two takes on every upgrade ---------------------------------------------------
+{
+  for (const slot of Object.keys(Town.PLOTS)) for (const [bk, b] of Object.entries(Town.PLOTS[slot].options)) for (const [uk, u] of Object.entries(b.upgrades)) {
+    assert(u.alt && u.alt.name && u.alt.line && u.alt.cost > 0, `${bk}.${uk} has the other advisor's take`);
+  }
+  const t = Town.fresh(); t.day = '2026-10-30';
+  Town.build(t, 'housing', 'tenement', 100, '2026-10-26');
+  const c = { day: '2026-10-30', cash: 200, lobbyists: 1 };
+  const before = Town.income(t);
+  const r = Town.upgrade(t, 'housing', 'fourth_floor', 200, c, 'alt');
+  assert(!r.error && r.cash === -45 && r.who === 'dolores' && r.name === 'A fourth floor, to code', 'the alt take costs its own price, from the other advisor');
+  assert.strictEqual(Town.income(t), before + 4, 'and pays its own numbers');
+  const v = Town.view(t, c).plots[0].building.upgrades.find((x) => x.key === 'fourth_floor');
+  assert(v.owned && v.take === 'alt' && v.alt.who === 'dolores', 'the view says which take you own');
+  assert(Town.upgrade(t, 'housing', 'fourth_floor', 200, c, 'main').error, 'owning one take settles it');
+  assert(Town.upgrade(t, 'housing', 'boiler', 200, c, 'sideways').error, 'only main or alt');
+  Town.build(t, 'housing', 'coop', 200);
+  assert.deepStrictEqual(t.upgrade_take, {}, 'a new building clears the takes');
+  const t2 = Town.fresh(); t2.day = '2026-10-30'; Town.build(t2, 'housing', 'tenement', 100, '2026-10-26');
+  assert(!Town.upgrade(t2, 'housing', 'fourth_floor', 200, c).error && Town.income(t2) === before + 8, 'main take as before');
+  ok('two takes on every upgrade: own price, own numbers, one per upgrade');
+}
+
+// --- Card teasers don't give the game away ------------------------------------------
+{
+  const shown = { good: 0, mixed: 0, bad: 0 };
+  for (const i of Town.ISSUES) for (const k of ['preston', 'dolores']) {
+    const s2 = Town.laterShown(i, k);
+    if (!Town.laterOf(i[k])) { assert.strictEqual(s2, null); continue; }
+    shown[s2] += 1;
+    if (s2 === 'good' || s2 === 'bad') assert.strictEqual(Town.laterOf(i[k]), s2, `${i.id}/${k}: "${s2}" only when true`);
+  }
+  assert(shown.good > 0 && shown.bad > 0 && shown.good + shown.bad < shown.mixed, `teasers: ${JSON.stringify(shown)}`);
+  ok(`card teasers: payoff only on weak-looking true ones (${shown.good}), bite only on too-good-looking true ones (${shown.bad}), the rest "something comes of it" (${shown.mixed})`);
 }
 
 // --- The front end has the same file ------------------------------------------
