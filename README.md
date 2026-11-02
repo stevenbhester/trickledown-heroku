@@ -41,10 +41,12 @@ lives in `trickledown-stevenhester-com` and runs on GitHub Pages.
   counts on the 24h board. `ride_count` and `origin_invested` follow the chain
   so the UI can say "riding ×3, started with $50".
   - **What a ride buys is the multiplier.** The new position's `mult_floor` is
-    the old ceiling and its `multiplier` is one base multiplier higher: a stock
-    runs ×10 → ×20 on its second day, crypto ×5 → ×10. After `RIDE_MAX_STEPS`
-    (1) rides it runs flat at that cap. A ride at ×20 dies on a 5% dip, which
-    is the point.
+    the old ceiling and its `multiplier` is the next rung up, each climb a
+    little smaller (`RIDE_LADDER` in `src/game.js`, times the base): crypto
+    ×5 → ×10 → ×14 → ×17 → ×20 → ×22 → ×23, stocks ×10 → ×20 → ×28 → ×34 →
+    ×40 → ×44 → ×46, then ×1 more every ride after. It never stops climbing.
+    A ride at ×20 dies on a 5% dip, which is the point. `/me` rules carry
+    `ride_ladder` and `ride_after` so the page shows the same numbers.
   - **No tax break.** Rides used to pay half the tax up front and defer the
     rest (forgiven at maturity). That's gone: a ride pays what collecting
     pays. Rides opened before the change still carry their `deferred_tax`

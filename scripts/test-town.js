@@ -166,11 +166,12 @@ ok('old saves migrate');
 
 // --- Ride math (src/game.js) -----------------------------------------------------
 const game = require('../src/game');
-assert.deepStrictEqual(game.rideMultipliers({ multiplier: 10 }, 10), { floor: 10, ceiling: 20 });
-assert.deepStrictEqual(game.rideMultipliers({ multiplier: 20 }, 10), { floor: 20, ceiling: 20 }, 'stocks cap at ×20');
-assert.deepStrictEqual(game.rideMultipliers({ multiplier: 30 }, 10), { floor: 20, ceiling: 20 }, 'an old ×30 ride comes back down to the cap');
-assert.deepStrictEqual(game.rideMultipliers({ multiplier: 10 }, 5), { floor: 10, ceiling: 10 }, 'crypto caps at ×10');
-assert.deepStrictEqual(game.rideMultipliers({ multiplier: 5 }, 5), { floor: 5, ceiling: 10 });
+// Rides keep climbing, a little less each time, then ×1 a ride.
+const climb = (base, n) => { const out = [base]; let m = base; for (let i = 0; i < n; i++) { const r = game.rideMultipliers({ multiplier: m }, base); assert.strictEqual(r.floor, m); m = r.ceiling; out.push(m); } return out; };
+assert.deepStrictEqual(climb(5, 8), [5, 10, 14, 17, 20, 22, 23, 24, 25], 'crypto ladder');
+assert.deepStrictEqual(climb(10, 8), [10, 20, 28, 34, 40, 44, 46, 47, 48], 'stock ladder');
+assert.deepStrictEqual(game.rideMultipliers({ multiplier: 30 }, 10), { floor: 30, ceiling: 34 }, 'an old ×30 ride carries on up the ladder');
+assert.deepStrictEqual(game.rideMultipliers({ multiplier: 10 }, 5), { floor: 10, ceiling: 14 }, 'crypto that used to stop at ×10 keeps going');
 const o = Date.now();
 const ride = { opened_at: new Date(o).toISOString(), matures_at: new Date(o + 864e5).toISOString(), multiplier: 20, mult_floor: 10 };
 assert.strictEqual(game.effectiveMultiplier(ride, o), 10, 'a ride starts where the last day ended');

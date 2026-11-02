@@ -1230,6 +1230,20 @@ and Today and Lobbyfest show a banner.
 - **Deploy the backend** with this one (API 18: the `cat` side, pokes and
   achievement `hires`). The `pokes` table is created on start.
 
+## Rides keep climbing (build 20261102b, API 19)
+
+- **No more ride cap.** Rides used to stop at ×10 (crypto) and ×20 (stocks)
+  and run flat from then on, so "×10 now, ×10 in 2h" was the whole story.
+  Now every ride climbs to the next rung, each climb a little smaller:
+  crypto ×5 → ×10 → ×14 → ×17 → ×20 → ×22 → ×23, stocks ×10 → ×20 → ×28 →
+  ×34 → ×40 → ×44 → ×46, then ×1 more per ride for good (`RIDE_LADDER`,
+  `RIDE_AFTER` in `src/game.js`; `/me` rules send `ride_ladder` and
+  `ride_after`). `RIDE_MAX_STEPS` is gone; unset it on Heroku if it's set.
+- Rides already running keep the numbers they started with (a ×10 flat crypto
+  ride stays ×10 until it matures, and says "at ×10 all day… the next ride
+  climbs"); the next ride off it goes ×10 → ×14.
+- FAQ and README describe the ladder. Deploy the backend (API 19).
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

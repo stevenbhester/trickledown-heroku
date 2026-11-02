@@ -93,11 +93,6 @@
       "value": "40",
       "required": false
     },
-    "RIDE_MAX_STEPS": {
-      "description": "How many rides keep raising the multiplier (1: stocks ×10 → ×20, crypto ×5 → ×10) before it runs flat at that cap.",
-      "value": "1",
-      "required": false
-    },
     "VAPID_PUBLIC": {
       "description": "Daily reminders (web push): the public key from `npx web-push generate-vapid-keys`. Leave blank to keep reminders off.",
       "required": false

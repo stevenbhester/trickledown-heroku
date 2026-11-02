@@ -266,7 +266,7 @@ function dayInfo(now = new Date()) {
 // The page checks this so a half-finished deploy (new page, old server) is
 // caught on sight instead of showing up as missing features. Bump it with any
 // release the page depends on; js/app.js API_WANTS must match.
-const API_VERSION = 18;
+const API_VERSION = 19;
 
 router.get('/health', (req, res) => res.json({ ok: true, api: API_VERSION, provider: cfg.priceProvider, google: google.enabled(), demo: cfg.demoMode }));
 
@@ -807,7 +807,7 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     user: { ...publicUser(user), quarter_donated: game.round2(quarterDonated), last_seen_at: prevSeen },
     day,
     allowance,
-    rules: { tax_rate: cfg.taxRate, ride_tax_factor: 1, ride_max_steps: cfg.rideMaxSteps, vest_amount: cfg.vestAmount, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
+    rules: { tax_rate: cfg.taxRate, ride_tax_factor: 1, ride_ladder: game.RIDE_LADDER, ride_after: game.RIDE_AFTER, vest_amount: cfg.vestAmount, daily_base: cfg.dailyBase, streak_bonus: cfg.streakBonus, daily_cap: cfg.dailyCap, hold_hours: cfg.holdHours, mult_floor: cfg.multFloor, demo: cfg.demoMode },
     positions,
     history,
     town: townView(user),

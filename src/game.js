@@ -70,14 +70,17 @@ function effectiveMultiplier(p, at = Date.now()) {
 }
 
 // The multipliers for a ride off a matured position: the new day starts at
-// the old ceiling and climbs by the asset's base multiplier again (stocks
-// ×10 → ×20, crypto ×5 → ×10), up to RIDE_MAX_STEPS rides past the first
-// day (1 by default); after that it rides flat at the cap.
+// the old ceiling and climbs to the next rung of RIDE_LADDER (times the
+// asset's base multiplier): crypto ×5 → ×10 → ×14 → ×17 → ×20 → ×22 → ×23,
+// stocks ×10 → ×20 → ×28 → ×34 → ×40 → ×44 → ×46. Each climb is a little
+// smaller; past the last rung every ride adds ×RIDE_AFTER (1). It never stops
+// climbing, and the higher it is the smaller the dip that takes it to zero.
+const RIDE_LADDER = [1, 2, 2.8, 3.4, 4, 4.4, 4.6];
+const RIDE_AFTER = 1;
 function rideMultipliers(prev, base) {
-  const cap = base * (1 + cfg.rideMaxSteps);
-  const floor = Math.min(prev.multiplier, cap);
-  const ceiling = Math.min(floor + base, cap);
-  return { floor, ceiling };
+  const floor = Math.max(base, Number(prev.multiplier) || base);
+  const rung = RIDE_LADDER.map((k) => Math.round(k * base * 100) / 100).find((m) => m > floor + 1e-9);
+  return { floor, ceiling: rung != null ? rung : Math.round((floor + RIDE_AFTER) * 100) / 100 };
 }
 
 // What a position is worth at a given instant. The real move is amplified by
@@ -190,5 +193,5 @@ function badgesFor(totalDonated) {
 
 module.exports = {
   round2, dayKey, addDays, nextReset, dayNumber, quarterKey, quarterEnd, LOBBYFEST, lobbyfestSplit,
-  allowanceFor, effectiveMultiplier, rideMultipliers, valueOf, tierFor, settle, badgesFor, BADGES,
+  allowanceFor, effectiveMultiplier, rideMultipliers, RIDE_LADDER, RIDE_AFTER, valueOf, tierFor, settle, badgesFor, BADGES,
 };

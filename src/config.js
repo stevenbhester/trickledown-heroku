@@ -30,10 +30,7 @@ module.exports = {
   // on it hires their first lobbyists and opens TrickleTown. 0 disables it.
   vestAmount: num(process.env.VEST_AMOUNT, 40),
   // Letting a winner ride is taxed like collecting it; what a ride buys is the
-  // multiplier: the new day starts where the old one ended and climbs one base
-  // multiplier, for this many rides, then rides flat at the cap (1: stocks
-  // ×10 → ×20, crypto ×5 → ×10).
-  rideMaxSteps: num(process.env.RIDE_MAX_STEPS, 1),
+  // multiplier, which keeps climbing (game.js RIDE_LADDER).
   // A position lives this long. At maturity its value freezes at that
   // moment's price until the player collects it.
   holdHours: num(process.env.HOLD_HOURS, 24),
