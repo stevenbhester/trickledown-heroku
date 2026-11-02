@@ -478,6 +478,43 @@ ok('ride multipliers climb and cap; deferred tax closes the early-sell gap');
   ok(`card teasers: payoff only on weak-looking true ones (${shown.good}), bite only on too-good-looking true ones (${shown.bad}), the rest "something comes of it" (${shown.mixed})`);
 }
 
+// --- The cat's way ------------------------------------------------------------------
+{
+  const looks = (f) => (f.cash || 0) + 7 * (f.income || 0) + (f.happy || 0);
+  const ids = Object.keys(Town.CAT_PATHS);
+  assert(ids.length >= 8, 'the cat has a way on several cards');
+  for (const id of ids) {
+    const i = Town.ISSUES.find((x) => x.id === id);
+    assert(i && i.cat === Town.CAT_PATHS[id], `${id} carries the cat's way`);
+    const c = i.cat.fx, p = i.preston.fx, d = i.dolores.fx;
+    assert(looks(c) > looks(p) && looks(c) > looks(d), `${id}: the cat's way is better than both (${looks(c)} vs ${looks(p)}, ${looks(d)})`);
+    assert(looks(c) - Math.max(looks(p), looks(d)) <= 8, `${id}: but only a little`);
+    assert(!i.cat.sets, `${id}: the cat starts no storylines`);
+    assert(!/"|said|says|whisper/i.test(i.cat.line.replace(/"first come, first served\."/, '')), `${id}: the cat doesn't talk`);
+  }
+  // Who sees it.
+  const t = Town.fresh(); t.day = '2026-11-02'; t.happiness = 55;
+  const rent = Town.ISSUES.find((x) => x.id === 'rent_day');
+  assert(!Town.catOk(rent, t, { holding: ['NVDA'] }), 'no cat, no way');
+  t.cat = { name: 'Biscuit', pronoun: 'he', coat: 'tabby', owned: [], wearing: {}, spent: 0 };
+  assert(Town.catOk(rent, t, { holding: ['NVDA'] }) && !Town.catOk(rent, t, { holding: ['KO'] }), 'rent day: needs a big name held');
+  const union = Town.ISSUES.find((x) => x.id === 'union');
+  assert(!Town.catOk(union, t, {}) && (t.happiness = 30, Town.catOk(union, t, {})), 'union: only when the town is miserable');
+  const art = Town.ISSUES.find((x) => x.id === 'lobby_art');
+  assert(!Town.catOk(art, t, {}) && (t.cat.wearing.head = 'beret', Town.catOk(art, t, {})), 'lobby art: a hat on');
+  // Taking it.
+  t.issues = [{ id: 'rent_day', chosen: null }];
+  const before = Town.income(t);
+  assert(Town.decide(t, 'rent_day', 'cat', 100, { holding: ['KO'] }).error, 'not eligible: refused');
+  const r = Town.decide(t, 'rent_day', 'cat', 100, { holding: ['AAPL'] });
+  assert(!r.error && r.side === 'cat' && t.sides.cat === 1 && t.issues[0].chosen === 'cat', 'eligible: taken, counted');
+  const v = Town.view(t, { day: '2026-11-02', holding: [] }).issues[0];
+  assert(v.chosen === 'cat' && v.cat && v.cat.line.includes('Biscuit') && v.cat.later === null, 'the view keeps the cat side once taken, in its own name');
+  t.issues = [{ id: 'union', chosen: null }]; t.happiness = 70;
+  assert(Town.view(t, { day: '2026-11-02' }).issues[0].cat === null, 'and hides it from those who do not qualify');
+  ok(`the cat's way: ${ids.length} cards, a little better than both, only for those who qualify`);
+}
+
 // --- The front end has the same file ------------------------------------------
 const fe = path.join(__dirname, '../../trickledown-stevenhester-com/js/town.js');
 if (fs.existsSync(fe)) {

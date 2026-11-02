@@ -19,6 +19,10 @@ async function tidy() {
   await sweepGuests();
   const pruned = await pricelog.prune();
   if (pruned) console.log(`[housekeeping] pruned ${pruned} price log row(s) older than ${pricelog.KEEP_DAYS} days`);
+  // Pokes and cat visits only matter for a day or two ("while you were out").
+  const { rowCount: pokes } = await query("DELETE FROM pokes WHERE created_at < now() - interval '60 days'");
+  const { rowCount: visits } = await query("DELETE FROM cat_visits WHERE created_at < now() - interval '60 days'");
+  if (pokes || visits) console.log(`[housekeeping] cleared ${pokes} old poke(s), ${visits} old cat visit(s)`);
 }
 
 function start() {

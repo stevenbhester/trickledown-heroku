@@ -15,6 +15,11 @@
 // Of course. Shares are set so each gift hires roughly half a day (week-one
 // milestones) to two days (a 30-day streak) of what trading hires at that
 // point. See REVIEW.md, "Achievement gifts".
+// How many lobbyists a gift hires: 1 to 3, by how hard it was to earn. The
+// tax on a gift is exactly what those hires cost at the town's price (never
+// more than 25% of it); the rest of the gift is cash. Before this, a gift was
+// taxed like any win and hired ~10 lobbyists on day one, more later, which
+// swamped what trading hires. Gifts don't get the featured-charity bonus.
 const cfg = require('./config');
 const { query } = require('./db');
 
@@ -31,48 +36,48 @@ const scaled = (floor, share) => (s) => nice(Math.max(floor, share * ((s && s.in
 const POWER_BROKER = 500;
 const LIST = [
   {
-    key: 'first_buy', title: 'Skin in the Game', how: 'Make your first investment.', from: 'Daddy',
+    key: 'first_buy', hires: 1, title: 'Skin in the Game', how: 'Make your first investment.', from: 'Daddy',
     gift: () => cfg.vestAmount,
     note: "Proud of you, champ. Here's a little something so you never have to touch the principal.",
   },
   {
-    key: 'first_win', title: 'Realized Gains', how: 'Cash out a profit.', from: 'Mommy', gift: scaled(20, 0.04),
+    key: 'first_win', hires: 1, title: 'Realized Gains', how: 'Cash out a profit.', from: 'Mommy', gift: scaled(20, 0.04),
     note: 'Your first real money! Daddy got misty. Buy yourself something with a crest on it.',
   },
   {
-    key: 'first_bust', title: 'Character Building', how: 'Lose a whole position.', from: 'Daddy', gift: scaled(25, 0.06),
+    key: 'first_bust', hires: 1, title: 'Character Building', how: 'Lose a whole position.', from: 'Daddy', gift: scaled(25, 0.06),
     note: 'Everybody loses one. I lost a shipping line. This should cover it.',
   },
   {
-    key: 'networking', title: 'Networking', how: 'Add 3 friends.', from: 'Mommy', gift: scaled(20, 0.04),
+    key: 'networking', hires: 1, title: 'Networking', how: 'Add 3 friends.', from: 'Mommy', gift: scaled(20, 0.04),
     note: 'Wonderful, darling. Who are their parents?',
   },
   {
-    key: 'streak_7', title: 'Creature of Habit', how: 'Play 7 days in a row.', from: 'Mommy', gift: scaled(30, 0.06),
+    key: 'streak_7', hires: 2, title: 'Creature of Habit', how: 'Play 7 days in a row.', from: 'Mommy', gift: scaled(30, 0.06),
     note: 'A whole week! You get the discipline from my side.',
   },
   {
-    key: 'landlord', title: 'Landlord', how: 'Build on every lot in TrickleTown.', from: 'Daddy', gift: scaled(40, 0.04),
+    key: 'landlord', hires: 2, title: 'Landlord', how: 'Build on every lot in TrickleTown.', from: 'Daddy', gift: scaled(40, 0.04),
     note: 'Property. Finally, a real job.',
   },
   {
-    key: 'let_it_ride', title: 'Let It Ride', how: 'Ride the same position twice.', from: 'Daddy', gift: scaled(40, 0.04),
+    key: 'let_it_ride', hires: 2, title: 'Let It Ride', how: 'Ride the same position twice.', from: 'Daddy', gift: scaled(40, 0.04),
     note: 'Never take money off the table. Your grandfather never did, and look at him. Well, look at his portrait.',
   },
   {
-    key: 'legend', title: 'Legendary', how: 'Cash out at Legend tier (double your money or better).', from: 'Mommy', gift: scaled(50, 0.10),
+    key: 'legend', hires: 2, title: 'Legendary', how: 'Cash out at Legend tier (double your money or better).', from: 'Mommy', gift: scaled(50, 0.10),
     note: "I told everyone at the club. They're asking who your advisor is.",
   },
   {
-    key: 'power_broker', title: 'Power Broker', how: `Hire ${POWER_BROKER} lobbyists, career.`, from: 'Mommy', gift: scaled(60, 0.10),
+    key: 'power_broker', hires: 3, title: 'Power Broker', how: `Hire ${POWER_BROKER} lobbyists, career.`, from: 'Mommy', gift: scaled(60, 0.10),
     note: 'Five hundred! Your father had four hundred and they named an interchange after him.',
   },
   {
-    key: 'streak_30', title: 'Clocked In', how: 'Play 30 days in a row.', from: 'Daddy', gift: scaled(100, 0.15),
+    key: 'streak_30', hires: 3, title: 'Clocked In', how: 'Play 30 days in a row.', from: 'Daddy', gift: scaled(100, 0.15),
     note: 'Thirty days without missing one. Nobody in this family has ever done that. Not even at the office.',
   },
   {
-    key: 'seven_figures', title: 'Seven Figures', how: 'Have $1M on the coin at once.', from: 'Daddy', gift: scaled(100, 0.06),
+    key: 'seven_figures', hires: 3, title: 'Seven Figures', how: 'Have $1M on the coin at once.', from: 'Daddy', gift: scaled(100, 0.06),
     note: "A million! They say the first one is the hardest. I wouldn't know.",
   },
 ];
@@ -153,7 +158,7 @@ function view(have, s) {
   const list = LIST.map((a) => {
     const r = have.get(a.key);
     return {
-      key: a.key, title: a.title, how: a.how, from: a.from, note: a.note,
+      key: a.key, title: a.title, how: a.how, from: a.from, note: a.note, hires: a.hires || 1,
       gift: r && r.gift != null ? Number(r.gift) : a.gift(s),
       earned_at: r ? r.earned_at : null,
       claimed_at: r ? r.claimed_at : null,
@@ -169,4 +174,15 @@ function view(have, s) {
   };
 }
 
-module.exports = { LIST, BY_KEY, stats, progress, met, sync, nice, scaled, POWER_BROKER };
+// The money side of a claim: { profit, tax, net, lobbyists }.
+function giftSplit(amount, hires, hireCost, rate = cfg.taxRate) {
+  const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+  const n = Math.max(1, hires || 1);
+  // Exactly n when the cap applies (rounding the tax to cents mustn't make it
+  // 0.99 and leave TrickleTown shut after the first gift).
+  const capped = amount * rate >= n * hireCost;
+  const tax = r2(capped ? n * hireCost : amount * rate);
+  return { profit: r2(amount), tax, net: r2(amount - tax), lobbyists: capped ? n : (hireCost > 0 ? r2(tax / hireCost) : 0) };
+}
+
+module.exports = { giftSplit, LIST, BY_KEY, stats, progress, met, sync, nice, scaled, POWER_BROKER };

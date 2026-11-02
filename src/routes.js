@@ -63,15 +63,30 @@ function calendarCtx(day) {
 // yesterday's tiers, the longest same-stock run, the charity's name.
 const townCtx = (u, extra = {}) => ({
   uid: u.id, cash: u.cash, lobbyists: u.total_donated, streak: u.streak, friends: u.friend_count || 0, unlocked: Town.isUnlocked(u.total_donated),
-  has_charity: !!u.charity_id, ...calendarCtx(extra.day || game.dayKey()), ...(u.town_extra || {}), ...extra,
+  has_charity: !!u.charity_id, ...calendarCtx(extra.day || game.dayKey()), ...(u.town_extra || lastExtras.get(u.id) || {}), ...extra,
 });
+// The last extras worked out per player, so a town view from a route that
+// doesn't compute them (build, upgrade, the cat's wardrobe...) still sees the
+// same cards, the cat's way included. Bounded; it's a convenience, not truth.
+const lastExtras = new Map();
 async function townExtras(u, dayKey) {
-  const [{ rows: tiers }, { rows: buys }, { rows: [ch] }] = await Promise.all([
+  const x = await townExtrasFresh(u, dayKey);
+  lastExtras.delete(u.id); lastExtras.set(u.id, x);
+  if (lastExtras.size > 5000) lastExtras.delete(lastExtras.keys().next().value);
+  return x;
+}
+async function townExtrasFresh(u, dayKey) {
+  const [{ rows: tiers }, { rows: buys }, { rows: [ch] }, { rows: held }, { rows: [money] }] = await Promise.all([
     query('SELECT DISTINCT tier FROM positions WHERE user_id = $1 AND closed_day = $2 AND tier IS NOT NULL', [u.id, game.addDays(dayKey, -1)]),
     query(`SELECT DISTINCT symbol, opened_day FROM positions
             WHERE user_id = $1 AND rolled_from IS NULL AND status NOT IN ('vested', 'gift') AND opened_day >= $2
             ORDER BY symbol, opened_day`, [u.id, game.addDays(dayKey, -90)]),
     u.charity_id ? query('SELECT name FROM charities WHERE id = $1 AND active', [u.charity_id]) : Promise.resolve({ rows: [] }),
+    // For the cat's way: what's held now, losses all time, money in play.
+    query(`SELECT DISTINCT symbol, asset_type FROM positions WHERE user_id = $1 AND status = 'open'`, [u.id]),
+    query(`SELECT COALESCE(SUM(-profit) FILTER (WHERE profit < 0 AND status IN ('closed', 'rolled')), 0)::float8 AS lost,
+                  COALESCE(SUM(invested) FILTER (WHERE status = 'open'), 0)::float8 AS open_cost
+             FROM positions WHERE user_id = $1`, [u.id]),
   ]);
   // The longest run of consecutive days buying one symbol.
   let best = 0, run = 0, prev = null;
@@ -79,7 +94,12 @@ async function townExtras(u, dayKey) {
     run = prev && prev.symbol === r.symbol && game.addDays(prev.opened_day, 1) === r.opened_day ? run + 1 : 1;
     best = Math.max(best, run); prev = r;
   }
-  return { tiers_yesterday: tiers.map((r) => r.tier), same_ticker_days: best, charity_name: ch ? ch.name : null };
+  return {
+    tiers_yesterday: tiers.map((r) => r.tier), same_ticker_days: best, charity_name: ch ? ch.name : null,
+    holding: held.map((r) => r.symbol), holding_crypto: held.some((r) => r.asset_type === 'crypto'),
+    lost_total: game.round2(money ? money.lost : 0), in_play: game.round2(Number(u.cash || 0) + (money ? money.open_cost : 0)),
+    ...(u.friend_count != null ? { friends: u.friend_count } : {}),
+  };
 }
 
 // A featured charity this week counts its lobbyists extra: { multiplier,
@@ -246,7 +266,7 @@ function dayInfo(now = new Date()) {
 // The page checks this so a half-finished deploy (new page, old server) is
 // caught on sight instead of showing up as missing features. Bump it with any
 // release the page depends on; js/app.js API_WANTS must match.
-const API_VERSION = 17;
+const API_VERSION = 18;
 
 router.get('/health', (req, res) => res.json({ ok: true, api: API_VERSION, provider: cfg.priceProvider, google: google.enabled(), demo: cfg.demoMode }));
 
@@ -667,10 +687,10 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
   let allowance = null;
   // The visit before this one, for "while you were out" (this request moves it to now).
   const prevSeen = req.user.last_seen_at || null;
+  user.friend_count = await friendCount(user.id);
   const extras = await townExtras(user, day.key).catch((e) => { console.warn('townExtras:', e.message); return {}; });
   user.town_extra = extras;
 
-  user.friend_count = await friendCount(user.id);
   if (user.last_allowance_day !== day.key) {
     // The grant and the town's new day happen on a locked row, so a build or
     // a card played in the same second can't be overwritten by a stale copy.
@@ -806,6 +826,8 @@ router.get('/me', auth.requireUser, wrap(async (req, res) => {
     new_followers: await addedYou(user.id, user.followers_seen_at || null),
     // Who petted the cat or brought a treat since the last visit.
     cat_visits: await catVisitsSince(user.id, prevSeen),
+    // Friends who poked you since the last visit.
+    pokes: await pokesSince(user.id, prevSeen),
     token: renewedToken,
   });
 }));
@@ -1033,10 +1055,12 @@ async function claimGift(req, res, key) {
     if (!row) return { error: `Not yet: ${a.how}` };
     if (row.claimed_at) return { error: 'Already in your pocket. Mommy and Daddy only pay once.' };
     const amount = game.round2(row.gift != null ? Number(row.gift) : a.gift());
-    const s = game.settle({ invested: 0, value: amount });
-    let lobbyists = s.tax > 0 ? game.round2(s.tax / hireCost) : 0;
-    const featured = lobbyists > 0 ? await featuredFor(tx, charity.id, day) : null;
-    if (featured) lobbyists = game.round2(lobbyists * featured.multiplier);
+    // A gift hires a fixed 1 to 3 lobbyists (its `hires`); the tax is what
+    // they cost and the rest is cash. No featured-charity bonus on gifts.
+    const g = achievements.giftSplit(amount, a.hires, hireCost);
+    const s = { profit: g.profit, tax: g.tax, net: g.net, tier: 'Gift', deferred_tax: 0 };
+    const lobbyists = g.lobbyists;
+    const featured = null;
     const { rows: [p] } = await tx.query(
       `INSERT INTO positions (user_id, symbol, name, asset_type, multiplier, mult_floor, invested, entry_price, opened_day, matures_at,
                               matured_at, matured_price, matured_value, origin_invested,
@@ -1208,12 +1232,15 @@ router.post('/town/decide', auth.requireUser, wrap(async (req, res) => {
     const { rows: [u] } = await tx.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
     if (!Town.isUnlocked(u.total_donated)) return { error: 'TrickleTown opens when you hire your first full lobbyist.' };
     const town = u.town || Town.fresh();
-    const r = Town.decide(town, String(issueId || ''), side, u.cash);
+    // The cat's way needs to know what the player holds, has lost, and so on.
+    u.friend_count = await friendCount(u.id, tx);
+    u.town_extra = await townExtras(u, game.dayKey());
+    const r = Town.decide(town, String(issueId || ''), String(side || ''), u.cash, townCtx(u, { day: game.dayKey() }));
     if (r.error) return r;
     const { rows: [u2] } = await tx.query(
       'UPDATE users SET cash = GREATEST(0, cash + $1), town = $2 WHERE id = $3 RETURNING *', [r.cash, town, u.id],
     );
-    await ledgerAdd(tx, u.id, 'card', game.round2(Number(u2.cash) - Number(u.cash)), `${String(issueId || '').slice(0, 40)} · sided with ${r.side === 'preston' ? 'Preston' : 'Dolores'}`);
+    await ledgerAdd(tx, u.id, 'card', game.round2(Number(u2.cash) - Number(u.cash)), `${String(issueId || '').slice(0, 40)} · sided with ${r.side === 'preston' ? 'Preston' : r.side === 'cat' ? 'the cat' : 'Dolores'}`);
     return { user: u2, cash: r.cash, fx: r.fx, noted: r.noted, side: r.side };
   });
   if (result.error) return res.status(400).json({ error: result.error });
@@ -1227,7 +1254,7 @@ router.post('/town/decide', auth.requireUser, wrap(async (req, res) => {
       GROUP BY i.chosen`,
     [game.dayKey(), String(issueId || '')],
   );
-  const crowd = { preston: 0, dolores: 0 };
+  const crowd = { preston: 0, dolores: 0, cat: 0 };
   for (const r of split) if (r.side in crowd) crowd[r.side] = r.n;
   res.json({ ok: true, cash_change: result.cash, fx: result.fx, noted: result.noted, side: result.side, crowd, user: publicUser(result.user), town: townView(result.user) });
 }));
@@ -1540,7 +1567,7 @@ function ledgerWords(kind, detail) {
   const d = String(detail || '');
   let m;
   if (kind === 'allowance' && (m = /stipend ([\d.]+)(?:, town ([+-]?[\d.]+))? · streak (\d+)/.exec(d))) return { base: Number(m[1]), town: m[2] ? Number(m[2]) : 0, streak: Number(m[3]) };
-  if (kind === 'card' && (m = /^([a-z0-9_]+) · sided with (Preston|Dolores)/.exec(d))) {
+  if (kind === 'card' && (m = /^([a-z0-9_]+) · sided with (Preston|Dolores|the cat)/.exec(d))) {
     const card = Town.ISSUES.find((i) => i.id === m[1]);
     return { title: card ? Town.catWords(null, card.title) : m[1], side: m[2] };
   }
@@ -2181,7 +2208,7 @@ async function playerProfile(viewer, u, day) {
         ? { happiness: null, income: null, hire_cost: null, meters_hidden: true }
         : { happiness: town.happiness, income: town.income, hire_cost: town.hire_cost }),
       motto: town.motto,
-      sides: { preston: u.town.sides.preston || 0, dolores: u.town.sides.dolores || 0 },
+      sides: { preston: u.town.sides.preston || 0, dolores: u.town.sides.dolores || 0, cat: u.town.sides.cat || 0 },
       pet: town.cat && town.cat.name ? { name: town.cat.name, pronoun: town.cat.pronoun, coat: town.cat.coat, wearing: town.cat.wearing, owned: town.cat.owned.length, spent: town.cat.spent, visits: await catVisitsToday(u.id, viewer && !isYou ? viewer.id : null, day.key) } : null,
       buildings: town.plots.map((p) => (p.building
         ? { slot: p.slot, label: p.label, key: p.key, name: p.building.name, tier: p.building.tier, days: p.days, upgrades: p.building.upgrades.filter((x) => x.owned).map((x) => (x.take === 'alt' && x.alt ? { name: x.alt.name, tier: x.alt.tier } : { name: x.name, tier: x.tier })) }
@@ -2190,6 +2217,8 @@ async function playerProfile(viewer, u, day) {
     is_friend: isFriend,
     added_you: addedYou,
     is_you: isYou,
+    // Your poke to them today, if any (friends only; one a day).
+    ...(isFriend && !isYou ? { poked_today: await pokedToday(viewer.id, u.id, day.key) } : {}),
     wall: wallOk ? { open: true, max: WALL_MAX, posts: await wallPosts(u, viewer) } : { open: false },
   };
 }
@@ -2232,6 +2261,42 @@ router.post('/players/:name/cat', auth.requireUser, RL.social, wrap(async (req, 
     'INSERT INTO cat_visits (owner_id, visitor_id, kind, day) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [owner.id, req.user.id, kind, day.key],
   );
   res.json({ ok: true, kind, already: ins.rowCount === 0, visits: await catVisitsToday(owner.id, req.user.id, day.key) });
+}));
+
+// --- Pokes ---------------------------------------------------------------------------
+//
+// From a friend's profile: one of three canned notes, once per friend per game
+// day. Only to someone you've added, never free text, so it can't be used to
+// harass anyone the way a message box could.
+const POKES = { nice_trades: 'Nice trades', lol_sorry: 'LOL sorry about that', miss_you: 'I miss you </3' };
+
+async function pokedToday(fromId, toId, dayKey) {
+  const { rows: [r] } = await query('SELECT kind FROM pokes WHERE from_id = $1 AND to_id = $2 AND day = $3', [fromId, toId, dayKey]);
+  return r ? r.kind : null;
+}
+
+// Pokes received since a moment (the player's previous visit).
+async function pokesSince(userId, since) {
+  const { rows } = await query(
+    `SELECT f.username, p.kind FROM pokes p JOIN users f ON f.id = p.from_id
+      WHERE p.to_id = $1 AND p.created_at > COALESCE($2, now() - interval '2 days')
+      ORDER BY p.created_at DESC LIMIT 10`,
+    [userId, since || null],
+  );
+  return rows.map((r) => ({ username: r.username, kind: r.kind }));
+}
+
+router.post('/players/:name/poke', auth.requireUser, RL.social, wrap(async (req, res) => {
+  const kind = String((req.body || {}).kind || '');
+  if (!Object.prototype.hasOwnProperty.call(POKES, kind)) return res.status(400).json({ error: 'Pick one of the three.' });
+  const to = await findPlayer(String(req.params.name || '').slice(0, 40));
+  if (!to) return res.status(404).json({ error: 'No player by that name.' });
+  if (to.id === req.user.id) return res.status(400).json({ error: 'You cannot poke yourself. You can try. It is just sad.' });
+  const { rows: fr } = await query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [req.user.id, to.id]);
+  if (!fr.length) return res.status(403).json({ error: 'Add them as a friend first.' });
+  const day = dayInfo();
+  const ins = await query('INSERT INTO pokes (from_id, to_id, kind, day) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [req.user.id, to.id, kind, day.key]);
+  res.json({ ok: true, already: ins.rowCount === 0, poked: await pokedToday(req.user.id, to.id, day.key) });
 }));
 
 // "today" / "this week" / "this month" / "a while ago": enough to know a

@@ -291,6 +291,19 @@ CREATE TABLE IF NOT EXISTS cat_visits (
 );
 CREATE INDEX IF NOT EXISTS cat_visits_owner ON cat_visits (owner_id, created_at DESC);
 
+-- Pokes between friends: one short canned note per pair per game day. Only
+-- three things can be said, so there is nothing to moderate.
+CREATE TABLE IF NOT EXISTS pokes (
+  id SERIAL PRIMARY KEY,
+  from_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  to_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('nice_trades', 'lol_sorry', 'miss_you')),
+  day TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (from_id, to_id, day)
+);
+CREATE INDEX IF NOT EXISTS pokes_to ON pokes (to_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1177,6 +1177,59 @@ and Today and Lobbyfest show a banner.
   README). The classic layout is untouched with it off (tested: no attribute,
   no tab bar, no tips). Bottom pop-ups ride above the tab bar.
 
+## Payday, a fairer review chart, the menu switch (build 20261101a, site only, API 17)
+
+- **Payday card.** The day's money gets a pay-stub card at the top of Today
+  instead of a four-second toast: the total (counts up the first time), then
+  allowance, streak bonus and TrickleTown's profit or upkeep, then tomorrow's
+  total. Remembered on the device for the rest of the game day
+  (`localStorage['trickledown.payday']`), so it's there on every visit until
+  × dismisses it; a new day's allowance replaces it. Nothing server-side.
+- **Review chart, $ or %.** One big position flattened every other line in
+  dollars. When the positions' sizes are 4× or more apart, the chart starts in
+  % change (each line from its own start), with a $ / % switch under it. The
+  rows and the running total stay in dollars either way.
+- **Simple mode switch in the ☰ menu** too, under Appearance (it was only in
+  Account, where it was hard to find).
+- Backend unchanged since 20261031b; no need to redeploy it.
+
+## The cat's way, pokes, fewer gift lobbyists, collect from the review (build 20261102a, API 18)
+
+- **The cat's way.** Ten Town Hall cards have a secret third answer that only
+  shows to players who qualify: holding a big-name stock (rent day; Tesla,
+  Nvidia or Meta for the high-roller card), crypto (the ball pit), $100K+ lost
+  all time (parking), $1M in play (overtime), two cat outfits (snacks), a hat
+  on the cat (lobby art), two friends (the retreat), a five-day streak (coffee
+  cups) or happiness under 40 (the union). It is always a little better than
+  both advisors: profit and happiness both up, never bigger than either advisor's
+  best number (sometimes equal to it). The cat never talks: the pitch is narration ("lies down across
+  the rent ledger, purrs…"), the role line is "seems to have an opinion", and
+  the result says "Probably a coincidence." The server checks eligibility on
+  `/town/decide` (refused: "The cat is asleep."), so the side can't be forced
+  from the client. Holdings, losses and money in play are worked out with the
+  other town extras and cached per player (`lastExtras`, capped at 5,000).
+  Ledger: "sided with the cat"; profiles count cat answers; the crowd line
+  counts it too.
+- **Pokes.** Friend profiles get 👉 Poke with three choices: Nice trades, LOL
+  sorry about that, I miss you </3. One a day per friend, only to someone
+  you've added, and only those three strings, so there is nothing to moderate.
+  The other player sees it once: a line in the welcome back, or a toast later
+  in the day (remembered per browser so a reload doesn't repeat it). New
+  `pokes` table; the nightly tidy-up clears pokes and cat visits older than 60
+  days.
+- **Gifts hire 1–3 lobbyists.** Each achievement now has `hires` (1 for the
+  early ones, 2 for the middle, 3 for power broker, 30-day streak and seven
+  figures). The gift's tax is capped at `hires × lobbyist price`, so the
+  player keeps the rest; no featured-charity bonus on gifts.
+- **Collect or ride from the review.** Each matured position on the welcome
+  back has Collect and Ride buttons, plus Collect all; a tally line adds up
+  the lobbyists hired and the money back on the coin. Collecting no longer
+  flips to TrickleTown (a toast says how many were hired).
+- **The logo's drip** now hangs off the last letter of "Down" wherever the
+  name wraps, instead of the far edge of the box on phones and narrow windows.
+- **Deploy the backend** with this one (API 18: the `cat` side, pokes and
+  achievement `hires`). The `pokes` table is created on start.
+
 ## Still open
 
 - **True 24-hour leaderboard** (portfolio now vs. 24h ago) needs stored

@@ -364,6 +364,76 @@
   ];
   const BY_ID = new Map(ISSUES.map((i) => [i.id, i]));
 
+  // --- The cat's way --------------------------------------------------------------
+  //
+  // On a few cards, a player with a named cat who meets the card's condition
+  // sees a third answer: whatever the cat seems to want. The cat never talks.
+  // It meows, sits on things, knocks things over, and it's never clear whether
+  // it meant anything. Its answer is a little better than either advisor's by
+  // the card-hint yardstick (cash + a week of profit + happiness, in $K): it
+  // keeps most of Preston's money without his damage, or fixes the morale for
+  // a fraction of Dolores's price. It sets no follow-up flags.
+  //
+  // when: what the player needs (all of it). Checked against ctx (see catOk):
+  //   holds [symbols]  an open position in any of them
+  //   crypto           an open crypto position
+  //   lost             realized losses, all time, at least this many $K
+  //   in_play          cash plus open positions at cost, at least $K
+  //   wardrobe         the cat owns at least this many items
+  //   wearing_head     the cat has something on its head
+  //   friends, streak  at least
+  //   happiness_below  the town is that unhappy
+  const BIG_NAMES = ['NVDA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'TSLA', 'NFLX'];
+  const CAT_PATHS = {
+    rent_day: { when: { holds: BIG_NAMES }, label: 'See what {cat} does',
+      line: '{Cat} lies down across the rent ledger, purrs, and will not be moved until the due date has slid a week. Rent comes in anyway. Probably a coincidence.',
+      fx: { income: 3, happy: 2 } },
+    parking: { when: { lost: 100 }, label: 'Follow {cat}',
+      line: '{Cat} walks out to the lot, sits in the one shady spot, and stares at you until you paint it "first come, first served." Meow.',
+      fx: { income: 2, happy: 3 } },
+    snacks: { when: { wardrobe: 2 }, label: 'Let {cat} choose',
+      line: '{Cat} knocks the premium snack catalogue off the desk and sits on the bulk-buy one instead. Then {he} eats a rubber band. The point stands.',
+      fx: { income: 1, happy: 4 } },
+    retreat: { when: { friends: 2 }, label: 'Ask {cat}, apparently',
+      line: '{Cat} curls up on the brochure for the cheap lodge, the one with a fireplace, and purrs loud enough to end the meeting.',
+      fx: { cash: 4, happy: 6 } },
+    overtime: { when: { in_play: 1000 }, label: 'Watch {cat}',
+      line: '{Cat} falls asleep on the keyboard at five on the dot, every day this week. People start leaving at five. Output goes up. Nobody can explain it.',
+      fx: { cash: 9, happy: 1 } },
+    ball_pit: { when: { crypto: true }, label: 'Defer to {cat}',
+      line: '{Cat} climbs into the empty delivery box, then out, then back in, and meows at the invoice. You return the ball pit and keep the boxes. Everyone loves the boxes.',
+      fx: { cash: 6, happy: 5 } },
+    coffee_cups: { when: { streak: 5 }, label: 'Do the {cat} thing',
+      line: '{Cat} pushes one mug, then another, off the counter, slowly, while holding eye contact. Mugs it is. Washable ones.',
+      fx: { income: 1, happy: 1 } },
+    lobby_art: { when: { wearing_head: true }, label: 'Go with {cat}',
+      line: '{Cat}, still in {his} hat, sits perfectly still under the empty frame for an hour. Somebody photographs it. It goes up on the wall. It is the best art in the building.',
+      fx: { cash: 2, happy: 2 } },
+    high_roller: { when: { holds: ['TSLA', 'NVDA', 'META'] }, label: 'Trust {cat}',
+      line: '{Cat} sits on the high roller\'s chips and growls, softly, until he tips the dealers. He thinks it\'s good luck. He comes back every week.',
+      fx: { cash: 15, happy: 3 } },
+    union: { when: { happiness_below: 40 }, label: 'Follow {cat} in',
+      line: '{Cat} walks into the meeting, sits on the union\'s list, and purrs at everyone in turn. You agree to the first three items. It feels like {his} idea.',
+      fx: { income: 1, happy: 6 } },
+  };
+  for (const [id, c] of Object.entries(CAT_PATHS)) { const i = BY_ID.get(id); if (i) i.cat = c; }
+  // Does this player see the cat's way on this card?
+  function catOk(issue, t, ctx = {}) {
+    const c = issue && issue.cat;
+    if (!c || !t.cat || !t.cat.name) return false;
+    const w = c.when || {}, held = ctx.holding || [];
+    if (w.holds && !w.holds.some((x) => held.includes(x))) return false;
+    if (w.crypto && !ctx.holding_crypto) return false;
+    if (w.lost != null && !((ctx.lost_total || 0) >= w.lost)) return false;
+    if (w.in_play != null && !((ctx.in_play || 0) >= w.in_play)) return false;
+    if (w.wardrobe != null && !(((t.cat.owned) || []).length >= w.wardrobe)) return false;
+    if (w.wearing_head && !(t.cat.wearing && t.cat.wearing.head)) return false;
+    if (w.friends != null && !((ctx.friends || 0) >= w.friends)) return false;
+    if (w.streak != null && !((ctx.streak || 0) >= w.streak)) return false;
+    if (w.happiness_below != null && !(t.happiness < w.happiness_below)) return false;
+    return true;
+  }
+
   // --- The cat ---------------------------------------------------------------
   // Arrives on day two (the 'cat' card); either answer keeps her. You name
   // her, pick he or she and a coat, and then you can spend a truly stupid
@@ -524,6 +594,7 @@
   // ("something comes of this"). Looks = cash + a week of income + happiness,
   // in $K; "very" = 12 or more apart from the other side.
   function laterShown(issue, k) {
+    if (k !== 'preston' && k !== 'dolores') return null;
     const truth = laterOf(issue[k]);
     if (!truth) return null;
     const fx = (side) => { const u = side.buys && ALL_UPGRADES[side.buys]; return u ? { cash: -u.cost, income: u.income || 0, happy: u.happy || 0 } : (side.fx || {}); };
@@ -830,12 +901,13 @@
   }
 
   // Returns { error } or { cash, fx, side }.
-  function decide(t, issueId, side, cashAvailable) {
+  function decide(t, issueId, side, cashAvailable, ctx = {}) {
     migrate(t);
     const slot = (t.issues || []).find((i) => i.id === issueId);
     if (!slot) return { error: "That card isn't on today's agenda." };
     if (slot.chosen) return { error: 'Already decided.' };
-    if (side !== 'preston' && side !== 'dolores') return { error: 'Pick Preston or Dolores.' };
+    if (side === 'cat' && !catOk(BY_ID.get(issueId), t, ctx)) return { error: 'The cat is asleep.' };
+    if (side !== 'preston' && side !== 'dolores' && side !== 'cat') return { error: 'Pick Preston or Dolores.' };
     const card = BY_ID.get(issueId)[side];
     let fx = card.fx, paid;
     if (card.buys) {
@@ -1012,7 +1084,9 @@
       issues: (t.issues || []).map((s) => {
         const i = BY_ID.get(s.id);
         if (!i) return null;
-        return { id: i.id, title: say(i.title), setup: say(i.setup), ask: say(i.ask || ''), general: !i.needs, chosen: s.chosen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), preston: sideView(i, 'preston'), dolores: sideView(i, 'dolores') };
+        // The cat's way: only for players who qualify (or who took it).
+        const cat = i.cat && (s.chosen === 'cat' || (!s.chosen && catOk(i, t, ctx))) ? sideView(i, 'cat') : null;
+        return { id: i.id, title: say(i.title), setup: say(i.setup), ask: say(i.ask || ''), general: !i.needs, chosen: s.chosen, consequence: !!(i.preston.sets || i.dolores.sets), followup: !!(i.needs && i.needs.flag), preston: sideView(i, 'preston'), dolores: sideView(i, 'dolores'), cat };
       }).filter(Boolean),
       // The whole collection, for the deck view.
       deck: ISSUES.filter((i) => !i.draft || adminOpen(t, i.id)).map((i) => {
@@ -1027,5 +1101,5 @@
     };
   }
 
-  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, passUpgrade, view, laterShown, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch, metersHidden, TIMED_FLAGS, CAT_ITEMS, CAT_COATS, catWords, cleanCatName, nameCat, buyCatItem, wearCatItem };
+  return { fresh, migrate, tick, ensureIssues, dealNewUnlocks, dealAllUnlocked, MAX_TOWN_CARDS, decide, build, upgrade, passUpgrade, view, laterShown, catOk, CAT_PATHS, hireCost, income, isUnlocked, needsMet, adminUnlock, deal, canPay, GRACE, LATER, UNLOCK_AT, PLOTS, ISSUES, BUILD_COST, clues, laterOf, adminSwitch, metersHidden, TIMED_FLAGS, CAT_ITEMS, CAT_COATS, catWords, cleanCatName, nameCat, buyCatItem, wearCatItem };
 }));
